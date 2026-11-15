@@ -23,7 +23,7 @@ without disrupting the people who depend on the machine.
 | Stage | What | Status |
 |---|---|---|
 | 1 | kubeadm cluster: containerd, Cilium, memory cap, on-demand control, auto-rollback | done (2026-11-14) |
-| 2 | GitOps: Argo CD syncs everything from this repo | ready, waits for the public repo |
+| 2 | GitOps: Argo CD syncs everything from this repo | done (2026-11-15) |
 | 3 | GPU: NVIDIA container toolkit + device plugin, GPU pods gated by the shared queue | planned |
 | 4 | Workloads: ComfyUI and Ollama as Helm charts, a render Job pipeline | planned |
 | 5 | Observability: Prometheus, Grafana, DCGM GPU metrics, alerts, SLOs | planned |
@@ -57,3 +57,14 @@ sudo bash bootstrap/install-kubernetes.sh --rollback # remove everything
      broke `apt-get`; the installer now refuses to start on a dirty package database;
   2. the host firewall dropped Service traffic to the API server, so Cilium crash-looped
      (`10.96.0.1:443: i/o timeout`); fixed with tagged firewall exceptions, see ADR-007.
+
+## Stage 2 result (2026-11-15)
+
+- Argo CD v3.6.1 installed with `bootstrap/install-argocd.sh`; after that the only manual step was
+  `kubectl apply -f gitops/root-app.yaml`. Applications `root`, `argocd` and `platform`: Synced, Healthy.
+- Argo CD now manages its own Helm release from `gitops/apps/argocd.yaml`.
+- `platform` created namespaces `jobs` and `monitoring` with quotas and default limits. A pod started
+  without resources got `requests 50m/64Mi, limit 256Mi` from the LimitRange.
+- Network policy, tested from a pod in `jobs`: internet reachable, home LAN router blocked,
+  Argo CD service blocked.
+- Memory with Argo CD: 1.41 GiB used by processes (plus 1.05 GiB reclaimable page cache) under the 6.5 GiB cap.
