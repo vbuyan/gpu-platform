@@ -121,3 +121,20 @@ existing bot config (root only) and creates the Alertmanager config Secret from
 **Budget.** Explicit requests ~0.9 GiB, limits ~2.6 GiB; the `monitoring` namespace quota is 1.5 / 4 GiB.
 The first deploy OOM-killed Grafana and its sidecars at 256 / 96 MiB; they now get 512 / 192 MiB,
 and Grafana uses the Recreate strategy because its volume is ReadWriteOnce.
+
+## ADR-011: always on, first to yield (supersedes ADR-003 for day-to-day use)
+
+**Context.** Monitoring and alerts are only useful if the cluster runs all the time; on-demand meant
+silence after every reboot. Measured with the full stack running: the cluster uses ~2.8 GiB of process
+memory, the host had 18 GiB available and never less than 6 GiB over two hours of 3D rendering, and
+systemd-oomd killed nothing in the previous week. The risk is the rare peak when big models load
+while a render runs: the October freezes began at about 2 GiB available.
+**Decision.** containerd and kubelet start at boot, and the cluster gives memory back first:
+- kubelet eviction on host `memory.available`: soft 4 GiB for 30 s, hard 2 GiB. Evicted pods stay
+  away while the node has the MemoryPressure taint; only the static control plane (~1 GiB) remains.
+- systemd-oomd watches `kubepods.slice` with a 20 % memory-pressure limit, stricter than the 50 %
+  on `system.slice`, so under real pressure it kills cluster pods before studio jobs.
+- The 6.5 GiB cap (ADR-002) still bounds the cluster from above.
+**Review.** The `StationMemoryLow` alert and the "Memory: host available vs cluster" panel show whether
+this costs the studio anything. If available memory often drops under 3 GiB with the cluster running,
+`install-always-on.sh --rollback` returns to on-demand.

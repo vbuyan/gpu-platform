@@ -12,7 +12,7 @@ without disrupting the people who depend on the machine.
 | Constraint | How the platform handles it |
 |---|---|
 | RAM is the bottleneck (31 GiB, often 25 GiB used) | The whole cluster lives in one cgroup capped at ~6.5 GiB |
-| Two teams share the host | The cluster runs on demand: `sudo k8s on` / `sudo k8s off` |
+| Two teams share the host | The cluster runs all the time but yields memory first: kubelet eviction at 4 / 2 GiB, oomd kills it before studio jobs (ADR-011) |
 | One GPU shared through an existing queue | GPU pods will acquire the card through the same queue, never around it |
 | Remote host, reached only over Tailscale | Install arms a dead man's switch that rolls everything back unless confirmed |
 | Host swap must stay on | kubelet `failSwapOn: false`, `swapBehavior: NoSwap` |
