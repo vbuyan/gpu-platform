@@ -118,4 +118,6 @@ rules are off instead of reporting "down" forever. `Watchdog` goes to a null rec
 **Secrets.** The Telegram token and chat id stay out of Git. `bin/make-alert-secret` reads the station's
 existing bot config (root only) and creates the Alertmanager config Secret from
 `gitops/monitoring/alertmanager.example.yaml`.
-**Budget.** Explicit requests 760 MiB, limits 2 GiB; the `monitoring` namespace quota is 1.5 / 3 GiB.
+**Budget.** Explicit requests ~0.9 GiB, limits ~2.6 GiB; the `monitoring` namespace quota is 1.5 / 4 GiB.
+The first deploy OOM-killed Grafana and its sidecars at 256 / 96 MiB; they now get 512 / 192 MiB,
+and Grafana uses the Recreate strategy because its volume is ReadWriteOnce.
