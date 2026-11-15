@@ -1,0 +1,30 @@
+# Argo CD for a single-node cluster capped at ~6.5 GiB (see docs/decisions.md, ADR-002).
+# Requests add up to ~0.5 GiB, limits to ~1.8 GiB. No SSO (dex) and no notifications yet.
+configs:
+  params:
+    # The UI is reached only through `kubectl port-forward` over SSH; TLS ends at the tunnel.
+    server.insecure: true
+dex:
+  enabled: false
+notifications:
+  enabled: false
+controller:
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 768Mi}
+repoServer:
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 512Mi}
+server:
+  resources:
+    requests: {cpu: 50m, memory: 96Mi}
+    limits: {memory: 256Mi}
+applicationSet:
+  resources:
+    requests: {cpu: 25m, memory: 48Mi}
+    limits: {memory: 128Mi}
+redis:
+  resources:
+    requests: {cpu: 25m, memory: 32Mi}
+    limits: {memory: 128Mi}

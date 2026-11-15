@@ -1,0 +1,14 @@
+# Cilium as the CNI, sized for one node with a tight memory budget.
+ipam:
+  mode: kubernetes            # use the podSubnet from kubeadm (10.244.0.0/16)
+kubeProxyReplacement: false   # keep kube-proxy: fewer moving parts on a remote host
+operator:
+  replicas: 1
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {memory: 256Mi}
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {memory: 512Mi}
+hubble:
+  enabled: false              # turned on later together with the observability stack

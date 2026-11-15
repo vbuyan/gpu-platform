@@ -1,0 +1,7 @@
+*.log
+.kube/
+*.kubeconfig
+admin.conf
+*.tfstate
+*.tfstate.*
+.terraform/

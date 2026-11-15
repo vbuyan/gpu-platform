@@ -1,0 +1,41 @@
+# kubeadm config for a single-node cluster on a shared GPU workstation.
+# Placeholders (__NODE_IP__ ...) are filled in by install-kubernetes.sh.
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: __NODE_IP__
+nodeRegistration:
+  criSocket: unix:///run/containerd/containerd.sock
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+kubernetesVersion: __K8S_VERSION__
+clusterName: gpu-platform
+networking:
+  podSubnet: __POD_CIDR__        # must not overlap Tailscale (100.64.0.0/10) or the LAN
+  serviceSubnet: 10.96.0.0/12
+apiServer:
+  certSANs:                       # kubectl from the laptop over Tailscale
+    - ai-station
+    - __TS_IP__
+    - 127.0.0.1
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+cgroupDriver: systemd
+# The host keeps its 32 GB swap (it protects other workloads); pods never swap.
+failSwapOn: false
+memorySwap:
+  swapBehavior: NoSwap
+# Hard budget for the whole cluster on a 31 GiB / 16-core host that also runs
+# ComfyUI, Ollama and two teams' jobs: everything Kubernetes starts lives in
+# kubepods.slice, which the kubelet caps at capacity - systemReserved (~6.5 GiB, 6 CPUs).
+systemReserved:
+  memory: 24Gi
+  cpu: "10"
+enforceNodeAllocatable:
+  - pods
+evictionHard:
+  memory.available: 100Mi
+  nodefs.available: 5%
+  imagefs.available: 5%

@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Start / stop the on-demand Kubernetes cluster.
+#   sudo k8s on       start containerd + kubelet, wait for the API server
+#   sudo k8s off      stop every pod, then kubelet and containerd (frees all cluster RAM)
+#   k8s status        what is running and how much memory the cluster uses
+set -euo pipefail
+CRI=unix:///run/containerd/containerd.sock
+need_root() { [ "$(id -u)" = 0 ] || { echo "Use: sudo k8s $1"; exit 1; }; }
+mem() {
+  local f=/sys/fs/cgroup/kubepods.slice
+  [ -r "$f/memory.current" ] || { echo "cluster memory: 0 (stopped)"; return; }
+  awk -v c="$(cat $f/memory.current)" -v m="$(cat $f/memory.max)" \
+    'BEGIN {printf "cluster memory: %.2f GiB of %.1f GiB cap\n", c/1073741824, m/1073741824}'
+}
+
+case "${1:-status}" in
+  on)
+    need_root on
+    systemctl start containerd kubelet
+    echo -n "waiting for the API server"
+    for _ in $(seq 1 90); do
+      if KUBECONFIG=/etc/kubernetes/admin.conf kubectl get --raw /readyz >/dev/null 2>&1; then
+        echo " ok"; KUBECONFIG=/etc/kubernetes/admin.conf kubectl get nodes; mem; exit 0
+      fi
+      echo -n "."; sleep 2
+    done
+    echo; echo "API server did not come up in 3 minutes: journalctl -u kubelet -n 50"; exit 1 ;;
+  off)
+    need_root off
+    systemctl stop kubelet 2>/dev/null || true
+    if systemctl is-active -q containerd; then
+      crictl --runtime-endpoint "$CRI" stopp $(crictl --runtime-endpoint "$CRI" pods -q) >/dev/null 2>&1 || true
+      systemctl stop containerd
+    fi
+    pkill -f containerd-shim-runc-v2 2>/dev/null || true
+    echo "cluster stopped"; mem ;;
+  status)
+    for s in containerd kubelet; do printf "%-11s %s\n" "$s" "$(systemctl is-active $s || true)"; done
+    mem
+    if systemctl is-active -q kubelet; then kubectl get nodes 2>/dev/null || true; fi ;;
+  *) echo "usage: k8s on|off|status"; exit 2 ;;
+esac

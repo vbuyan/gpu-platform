@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Point every Argo CD Application in gitops/ at the GitHub repository: bin/set-repo-url https://github.com/<user>/gpu-platform.git
+set -euo pipefail
+[ $# -eq 1 ] || { echo "usage: $0 https://github.com/<user>/gpu-platform.git"; exit 2; }
+cd "$(dirname "$0")/.."
+grep -rl 'repoURL: https://github.com/' gitops | xargs sed -i -E "s#repoURL: https://github.com/[^ ]*gpu-platform(\.git)?#repoURL: $1#"
+grep -rn 'repoURL: https://github.com/' gitops
