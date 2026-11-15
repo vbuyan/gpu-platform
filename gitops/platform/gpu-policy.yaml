@@ -14,14 +14,18 @@ spec:
         operations: [CREATE, UPDATE]
         resources: [pods, pods/ephemeralcontainers]
   matchConditions:
-    - name: requests-a-cdi-device
+    - name: asks-for-the-gpu
       expression: >-
-        has(object.metadata.annotations) &&
-        object.metadata.annotations.exists(k, k.startsWith('cdi.k8s.io/'))
+        (has(object.metadata.annotations) &&
+         object.metadata.annotations.exists(k, k.startsWith('cdi.k8s.io/'))) ||
+        (has(object.spec.runtimeClassName) && object.spec.runtimeClassName == 'gpu-queue')
   validations:
     - expression: request.namespace == 'jobs'
       message: GPU pods may run only in namespace jobs
+    - expression: has(object.spec.runtimeClassName) && object.spec.runtimeClassName == 'gpu-queue'
+      message: "GPU pods use runtimeClassName: gpu-queue"
     - expression: >-
+        has(object.metadata.annotations) && 'cdi.k8s.io/gpu' in object.metadata.annotations &&
         object.metadata.annotations.all(k, !k.startsWith('cdi.k8s.io/') ||
           (k == 'cdi.k8s.io/gpu' &&
            object.metadata.annotations[k] == 'nvidia.com/gpu=all,station.local/gpu-queue=socket'))

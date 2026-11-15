@@ -1,0 +1,7 @@
+# Pods with this class run through nvidia-container-runtime in CDI mode (handler set up by
+# bootstrap/install-gpu-access.sh). The admission policy gpu-through-queue decides who may use it.
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: gpu-queue
+handler: gpu-queue

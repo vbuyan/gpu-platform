@@ -16,6 +16,7 @@ spec:
         cdi.k8s.io/gpu: nvidia.com/gpu=all,station.local/gpu-queue=socket
     spec:
       restartPolicy: Never
+      runtimeClassName: gpu-queue    # nvidia-container-runtime injects the CDI devices named above
       securityContext:
         runAsUser: 2950              # kube-gpu: the name of the cluster in the GPU queue
         runAsGroup: 2950

@@ -19,6 +19,9 @@ exec > >(tee -a --output-error=warn "$LOG") 2>&1
 echo "=== $(date '+%F %T') $0 ${1:-install}"
 
 if [ "${1:-}" = "--rollback" ]; then
+  rm -f /etc/containerd/conf.d/50-gpu-queue.toml
+  if systemctl is-active -q containerd; then systemctl restart containerd; fi
+  systemctl unmask nvidia-cdi-refresh.path nvidia-cdi-refresh.service >/dev/null 2>&1 || true
   rm -f /etc/cdi/nvidia.yaml /etc/cdi/station-gpu-queue.yaml "$WRAPPER"
   rmdir /etc/cdi /usr/local/lib/gpu-platform 2>/dev/null || true
   apt-mark unhold nvidia-container-toolkit-base 2>/dev/null || true
@@ -78,7 +81,31 @@ install -D -m 755 "$REPO/gpu-queue/turn" "$WRAPPER"
 } > /etc/cdi/station-gpu-queue.yaml
 nvidia-ctk --quiet cdi list
 
-echo "5. Device permissions are still owned by the queue"
+echo "5. No root NVML at boot: mask nvidia-cdi-refresh (it runs nvidia-smi as root)"
+systemctl disable --now nvidia-cdi-refresh.path nvidia-cdi-refresh.service >/dev/null 2>&1 || true
+systemctl mask nvidia-cdi-refresh.path nvidia-cdi-refresh.service >/dev/null
+rm -f /var/run/cdi/nvidia.yaml
+
+echo "6. Runtime class gpu-queue: containerd passes cdi.k8s.io/* pod annotations to the NVIDIA runtime"
+# kubelet does not hand pod annotations to containerd's own CDI injection, so a dedicated runtime
+# handler copies them into the OCI spec and nvidia-container-runtime (CDI mode) injects the devices.
+# Pods without runtimeClassName: gpu-queue keep using plain runc.
+nvidia-ctk --quiet config --set nvidia-container-runtime.mode=cdi --in-place
+install -d -m 755 /etc/containerd/conf.d
+cat > /etc/containerd/conf.d/50-gpu-queue.toml <<'TOML'
+# gpu-platform stage 3 (ADR-009): runtime handler for RuntimeClass gpu-queue
+version = 3
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.gpu-queue]
+  runtime_type = 'io.containerd.runc.v2'
+  pod_annotations = ['cdi.k8s.io/*']
+  [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.gpu-queue.options]
+    BinaryName = '/usr/bin/nvidia-container-runtime'
+    SystemdCgroup = true
+TOML
+containerd config dump | grep -q "runtimes.gpu-queue" || { echo "containerd did not load the gpu-queue runtime"; exit 1; }
+if systemctl is-active -q containerd; then systemctl restart containerd; fi   # running pods keep running (shims)
+
+echo "7. Device permissions are still owned by the queue"
 getfacl -p /dev/nvidia0 | sed 's/^/   /'
 echo
 echo "=== GPU access for pods installed. Test: kubectl apply -f $REPO/examples/gpu-smoke-job.yaml"

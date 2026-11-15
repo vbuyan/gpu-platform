@@ -81,12 +81,19 @@ unprivileged user in the GPU group) and a second CDI device mounts the queue soc
 as `gpu run`, waits for its turn and for free VRAM, then execs the job and keeps the queue
 connection open: when the process ends or the pod is killed, the card passes to the next waiter.
 In the queue the cluster appears as its own user, `kube-gpu` (uid 2950), next to the two teams.
-**Enforcement.** A ValidatingAdmissionPolicy (CEL, no webhook) allows the CDI annotation only in
+**Enforcement.** A ValidatingAdmissionPolicy (CEL, no webhook) allows the CDI annotation and the runtime class only in
 namespace `jobs`, only with exactly one container whose command starts with the wrapper, and only
 as uid 2950. `jobs` enforces Pod Security `restricted`: no root, no capabilities, no host paths.
-Tested with server-side dry runs: a correct pod is admitted; seven bypass attempts are denied.
+Tested with server-side dry runs: a correct pod is admitted; ten bypass attempts are denied.
 The wrapper was tested against a private copy of the dispatcher: the second job waited for the
 first and got the card the moment the first process exited.
+**First attempt and the fix.** The first test pod was admitted but failed to start: `exec
+/opt/gpu-queue/turn: no such file or directory`. containerd injects CDI devices named in container
+annotations, and kubelet does not copy pod annotations there. The fix is the usual NVIDIA pattern: a
+RuntimeClass `gpu-queue` whose containerd handler passes `cdi.k8s.io/*` pod annotations into the OCI
+spec and runs `nvidia-container-runtime` in CDI mode, which injects the devices. Pods of every other
+class keep plain runc. The toolkit package also enabled `nvidia-cdi-refresh`, which runs `nvidia-smi`
+as root at boot and resets the device permissions; the installer masks it.
 **Trade-off.** Kubernetes cannot count GPUs or queue GPU pods itself; a waiting pod holds its CPU and
 memory requests while it waits. On one shared card the existing queue is the better arbiter, and the
 studio sees the cluster as one more polite participant instead of a competitor.

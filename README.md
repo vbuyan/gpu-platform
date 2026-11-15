@@ -24,7 +24,7 @@ without disrupting the people who depend on the machine.
 |---|---|---|
 | 1 | kubeadm cluster: containerd, Cilium, memory cap, on-demand control, auto-rollback | done (2026-11-14) |
 | 2 | GitOps: Argo CD syncs everything from this repo | done (2026-11-15) |
-| 3 | GPU: CDI + the shared queue, admission policy instead of a device plugin (ADR-009) | in progress |
+| 3 | GPU: CDI + the shared queue, admission policy instead of a device plugin (ADR-009) | done (2026-11-15) |
 | 4 | Workloads: ComfyUI and Ollama as Helm charts, a render Job pipeline | planned |
 | 5 | Observability: Prometheus, Grafana, DCGM GPU metrics, alerts, SLOs | planned |
 | 6 | CI: GitHub Actions builds, scans and publishes images to GHCR | planned |
@@ -70,3 +70,17 @@ sudo bash bootstrap/install-kubernetes.sh --rollback # remove everything
 - Network policy, tested from a pod in `jobs`: internet reachable, home LAN router blocked,
   Argo CD service blocked.
 - Memory with Argo CD: 1.41 GiB used by processes (plus 1.05 GiB reclaimable page cache) under the 6.5 GiB cap.
+
+## Stage 3 result (2026-11-15)
+
+- GPU pods use `runtimeClassName: gpu-queue` and one CDI annotation; no device plugin (ADR-009).
+- Admission policy `gpu-through-queue`: a correct GPU pod is admitted, 10 of 10 bypass attempts are
+  denied (wrong namespace, no wrapper, root or another user, GPU without the queue, extra containers,
+  missing runtime class).
+- Live test, `examples/gpu-smoke-job.yaml`, on the production queue while a Blender render held the card:
+  - the pod joined the queue as `kube-gpu` and waited **927 s**, behind the render and ahead of the
+    next host job, exactly like any `gpu run`;
+  - it got the card with 23.6 GiB VRAM free, ran an fp16 matmul benchmark on the RTX 3090:
+    **66.0 TFLOPS**, peak 520 MiB VRAM;
+  - the dispatcher log shows the card released 2 s later, the moment the process exited, and the
+    next host job started on time. Device permissions stayed with the queue throughout.
