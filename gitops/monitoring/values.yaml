@@ -98,6 +98,8 @@ prometheus-node-exporter:
     # the directory, not the files: the dispatcher replaces gpu.who atomically (rename), and a
     # single-file bind mount would keep showing the old inode
     - {name: host-srv, hostPath: /srv, mountPath: /host/srv, readOnly: true}
+    # job times in the queue files are station-local; without this the 24 h window is 8 h off (UTC)
+    - {name: host-localtime, hostPath: /etc/localtime, mountPath: /etc/localtime, readOnly: true}
   configmaps:
     - {name: gpu-queue-exporter, mountPath: /exporter}
   sidecars:
