@@ -67,3 +67,26 @@ The UI is reached through `kubectl port-forward` over SSH, so it is never expose
 **Guard rails.** Workload namespaces get a ResourceQuota and a LimitRange, so a container without
 limits still gets one; `jobs` may reach DNS and the internet but not private ranges or the tailnet.
 Self-management uses `prune: false`, so a bad commit cannot delete Argo CD.
+
+## ADR-009: the GPU stays outside the scheduler; pods take turns in the existing queue
+
+**Context.** One RTX 3090 is shared by two teams through a host dispatcher (`gpu run`): one owner at
+a time, the device files are opened (ACL) only for the current owner, a janitor unloads idle models.
+The NVIDIA device plugin would advertise `nvidia.com/gpu: 1` and hand the card to a pod whenever
+Kubernetes thinks it is free. Kubernetes cannot see the host workloads, so it would always think so.
+It also runs NVML as root, which resets the device permissions the queue relies on.
+**Decision.** No device plugin. The GPU is described with CDI (`nvidia-ctk cdi generate`, run as an
+unprivileged user in the GPU group) and a second CDI device mounts the queue socket and a wrapper,
+`/opt/gpu-queue/turn`. A GPU pod asks for both with one annotation. The wrapper joins the same queue
+as `gpu run`, waits for its turn and for free VRAM, then execs the job and keeps the queue
+connection open: when the process ends or the pod is killed, the card passes to the next waiter.
+In the queue the cluster appears as its own user, `kube-gpu` (uid 2950), next to the two teams.
+**Enforcement.** A ValidatingAdmissionPolicy (CEL, no webhook) allows the CDI annotation only in
+namespace `jobs`, only with exactly one container whose command starts with the wrapper, and only
+as uid 2950. `jobs` enforces Pod Security `restricted`: no root, no capabilities, no host paths.
+Tested with server-side dry runs: a correct pod is admitted; seven bypass attempts are denied.
+The wrapper was tested against a private copy of the dispatcher: the second job waited for the
+first and got the card the moment the first process exited.
+**Trade-off.** Kubernetes cannot count GPUs or queue GPU pods itself; a waiting pod holds its CPU and
+memory requests while it waits. On one shared card the existing queue is the better arbiter, and the
+studio sees the cluster as one more polite participant instead of a competitor.

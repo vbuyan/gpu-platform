@@ -1,0 +1,51 @@
+# The GPU is not a Kubernetes resource here: the station's queue decides who uses it (ADR-009).
+# A pod gets the card only through the CDI annotation, and this policy makes sure such a pod
+# can only start through the queue wrapper, as the queue's user kube-gpu, in namespace jobs.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: gpu-through-queue
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods, pods/ephemeralcontainers]
+  matchConditions:
+    - name: requests-a-cdi-device
+      expression: >-
+        has(object.metadata.annotations) &&
+        object.metadata.annotations.exists(k, k.startsWith('cdi.k8s.io/'))
+  validations:
+    - expression: request.namespace == 'jobs'
+      message: GPU pods may run only in namespace jobs
+    - expression: >-
+        object.metadata.annotations.all(k, !k.startsWith('cdi.k8s.io/') ||
+          (k == 'cdi.k8s.io/gpu' &&
+           object.metadata.annotations[k] == 'nvidia.com/gpu=all,station.local/gpu-queue=socket'))
+      message: "request the GPU with exactly cdi.k8s.io/gpu: nvidia.com/gpu=all,station.local/gpu-queue=socket"
+    - expression: >-
+        size(object.spec.containers) == 1 &&
+        (!has(object.spec.initContainers) || size(object.spec.initContainers) == 0) &&
+        (!has(object.spec.ephemeralContainers) || size(object.spec.ephemeralContainers) == 0)
+      message: a GPU pod has exactly one container (each container would take its own turn)
+    - expression: >-
+        object.spec.containers.all(c, has(c.command) && size(c.command) > 1 &&
+          c.command[0] == '/opt/gpu-queue/turn')
+      message: "the container must start through the queue: command: [/opt/gpu-queue/turn, <program>, ...]"
+    - expression: >-
+        has(object.spec.securityContext) && has(object.spec.securityContext.runAsUser) &&
+        object.spec.securityContext.runAsUser == 2950 &&
+        object.spec.containers.all(c, !has(c.securityContext) ||
+          !has(c.securityContext.runAsUser) || c.securityContext.runAsUser == 2950)
+      message: GPU pods run as the queue user kube-gpu (runAsUser 2950)
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: gpu-through-queue
+spec:
+  policyName: gpu-through-queue
+  validationActions: [Deny]

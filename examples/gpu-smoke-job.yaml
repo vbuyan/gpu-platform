@@ -1,0 +1,54 @@
+# A GPU job that waits for the station's GPU queue like any `gpu run`:
+#   kubectl apply -f examples/gpu-smoke-job.yaml && kubectl -n jobs logs -f job/gpu-smoke
+# While it waits, `gpu queue` on the host shows it as "kube-gpu - k8s gpu-smoke ...".
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-smoke
+  namespace: jobs
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 3600        # includes the time spent waiting in the queue
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      annotations:
+        cdi.k8s.io/gpu: nvidia.com/gpu=all,station.local/gpu-queue=socket
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsUser: 2950              # kube-gpu: the name of the cluster in the GPU queue
+        runAsGroup: 2950
+        runAsNonRoot: true
+        supplementalGroups: [1002, 983]   # gpu: may talk to the queue; gpudev: may open the device nodes
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: matmul
+          image: pytorch/pytorch:2.14.1-cuda13.0-cudnn9-runtime
+          command: [/opt/gpu-queue/turn, python, -c]
+          args:
+            - |
+              import time, torch
+              assert torch.cuda.is_available(), "CUDA is not available"
+              print("GPU:", torch.cuda.get_device_name(0), flush=True)
+              n, reps = 8192, 50
+              a = torch.randn(n, n, device="cuda", dtype=torch.float16)
+              b = torch.randn_like(a)
+              a @ b; torch.cuda.synchronize()
+              t = time.time()
+              for _ in range(reps):
+                  c = a @ b
+              torch.cuda.synchronize()
+              dt = time.time() - t
+              print(f"fp16 matmul {n}x{n}: {2 * n**3 * reps / dt / 1e12:.1f} TFLOPS, "
+                    f"peak VRAM {torch.cuda.max_memory_allocated() / 2**20:.0f} MiB", flush=True)
+          env:
+            - {name: GPU_WHAT, value: "k8s gpu-smoke (fp16 matmul benchmark)"}
+            - {name: GPU_NEED_MB, value: "1500"}
+            - {name: HOME, value: /tmp}
+          resources:
+            requests: {cpu: "1", memory: 1Gi}
+            limits: {memory: 2Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}

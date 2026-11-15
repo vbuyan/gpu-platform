@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+# /opt/gpu-queue/turn: the entrypoint of every GPU pod (the admission policy gpu-through-queue enforces it).
+# Joins the station's shared GPU queue (the same dispatcher `gpu run` uses), waits for its turn,
+# waits until enough VRAM is free, then execs the real command. The queue connection stays open on
+# fd 9 for the life of the command: when the process exits or the pod is killed, the kernel closes it
+# and the dispatcher hands the card to the next waiter. Nothing to release by hand.
+#   turn COMMAND [ARGS...]
+#   env: GPU_WHAT     label shown in `gpu queue` (default: "k8s <pod name>")
+#        GPU_NEED_MB  free VRAM to wait for before starting (default 2000)
+#        GPU_WAIT_S   how long to wait for that VRAM (default 600), then give the turn back
+#        GPU_FON=1    background job: at night (00-08) lets everyone go first
+import os
+import socket
+import subprocess
+import sys
+import time
+
+SOCK = os.environ.get("GPU_SOCK", "/run/gpu/ochered.sock")
+
+
+def log(msg):
+    print(f"gpu-queue: {msg}", flush=True)
+
+
+def free_mb():
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=memory.total,memory.used",
+                              "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=20)
+        total, used = (int(x) for x in out.stdout.split(","))
+        return total - used
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+
+
+def main():
+    if len(sys.argv) < 2:
+        sys.exit("usage: turn COMMAND [ARGS...]")
+    cmd = sys.argv[1:]
+    what = " ".join((os.environ.get("GPU_WHAT") or "k8s " + os.environ.get("HOSTNAME", "pod")).split())
+    need = int(os.environ.get("GPU_NEED_MB", "2000"))
+    wait_s = int(os.environ.get("GPU_WAIT_S", "600"))
+    t0 = time.time()
+
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        s.connect(SOCK)
+    except OSError as e:
+        sys.exit(f"gpu-queue: cannot reach the GPU queue at {SOCK}: {e.strerror}")
+    # protocol of the station dispatcher (Russian keywords): "ждать <label>" = wait in line
+    s.sendall(f"ждать {what}\n".encode())
+    if os.environ.get("GPU_FON") == "1":
+        s.sendall("фон\n".encode())                       # "background"
+    told = None
+    for line in s.makefile("r", encoding="utf-8", errors="replace"):
+        line = line.rstrip("\n")
+        if line == "твоя":                                # "yours": the card is ours
+            break
+        if line.startswith("ошибка "):                   # "error ..."
+            sys.exit(f"gpu-queue: dispatcher refused: {line[7:]}")
+        if line.startswith("перед ") and line != told:    # "ahead of you: N"
+            log(f"queued as '{what}', jobs ahead: {line[6:]}")
+            told = line
+    else:
+        sys.exit("gpu-queue: the dispatcher closed the connection (restarted?); run the job again")
+    log(f"the card is ours after {int(time.time() - t0)} s in the queue")
+
+    # the previous owner's idle servers may still hold VRAM; the station janitor unloads them
+    end = time.time() + wait_s
+    while True:
+        free = free_mb()
+        if free is None:
+            log("nvidia-smi is not available, starting without the VRAM check")
+            break
+        if free >= need:
+            log(f"{free} MiB VRAM free (need {need}), starting: {' '.join(cmd)}")
+            break
+        if time.time() >= end:
+            sys.exit(f"gpu-queue: only {free} MiB VRAM free after {wait_s} s (need {need}); giving the turn back")
+        log(f"{free} MiB VRAM free, need {need}; waiting")
+        time.sleep(15)
+
+    if s.fileno() != 9:
+        os.dup2(s.fileno(), 9)                            # dup2 makes fd 9 inheritable: it survives exec
+    os.execvp(cmd[0], cmd)
+
+
+if __name__ == "__main__":
+    main()

@@ -4,7 +4,11 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: jobs
-  labels: {gpu-platform/purpose: batch}
+  labels:
+    gpu-platform/purpose: batch
+    # no root, no capabilities, no host paths: the GPU comes only through CDI and the queue
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
 ---
 apiVersion: v1
 kind: ResourceQuota

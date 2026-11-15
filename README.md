@@ -24,7 +24,7 @@ without disrupting the people who depend on the machine.
 |---|---|---|
 | 1 | kubeadm cluster: containerd, Cilium, memory cap, on-demand control, auto-rollback | done (2026-11-14) |
 | 2 | GitOps: Argo CD syncs everything from this repo | done (2026-11-15) |
-| 3 | GPU: NVIDIA container toolkit + device plugin, GPU pods gated by the shared queue | planned |
+| 3 | GPU: CDI + the shared queue, admission policy instead of a device plugin (ADR-009) | in progress |
 | 4 | Workloads: ComfyUI and Ollama as Helm charts, a render Job pipeline | planned |
 | 5 | Observability: Prometheus, Grafana, DCGM GPU metrics, alerts, SLOs | planned |
 | 6 | CI: GitHub Actions builds, scans and publishes images to GHCR | planned |
@@ -36,6 +36,8 @@ without disrupting the people who depend on the machine.
 ```
 bootstrap/   host install: install-kubernetes.sh, kubeadm-config.yaml, cilium-values.yaml
 bin/k8s      start / stop / status of the on-demand cluster
+gpu-queue/   turn: entrypoint of GPU pods, waits for the station GPU queue
+examples/    gpu-smoke-job.yaml: fp16 matmul benchmark through the queue
 gitops/      Argo CD app of apps: root-app.yaml -> apps/ -> platform/ (namespaces, quotas, network policy)
 docs/        decisions (ADRs), architecture, postmortems
 ```
