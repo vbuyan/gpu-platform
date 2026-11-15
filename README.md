@@ -26,7 +26,7 @@ without disrupting the people who depend on the machine.
 | 2 | GitOps: Argo CD syncs everything from this repo | done (2026-11-15) |
 | 3 | GPU: CDI + the shared queue, admission policy instead of a device plugin (ADR-009) | done (2026-11-15) |
 | 4 | Workloads: ComfyUI and Ollama as Helm charts, a render Job pipeline | planned |
-| 5 | Observability: Prometheus, Grafana, GPU-queue metrics without NVML, Telegram alerts (ADR-010) | in progress |
+| 5 | Observability: Prometheus, Grafana, GPU-queue metrics without NVML, Telegram alerts (ADR-010) | done (2026-11-15) |
 | 6 | CI: GitHub Actions builds, scans and publishes images to GHCR | planned |
 | 7 | Terraform: the same stack declared as code, plus an optional one-day cloud replica | planned |
 | 8 | Write-ups: architecture, decisions, two incident postmortems with numbers | planned |
@@ -84,3 +84,17 @@ sudo bash bootstrap/install-kubernetes.sh --rollback # remove everything
     **66.0 TFLOPS**, peak 520 MiB VRAM;
   - the dispatcher log shows the card released 2 s later, the moment the process exited, and the
     next host job started on time. Device permissions stayed with the queue throughout.
+
+## Stage 5 result (2026-11-15)
+
+- Argo CD applications `storage` (local-path-provisioner), `monitoring` (kube-prometheus-stack) and
+  `monitoring-extras` (GPU-queue exporter, station alert rules, dashboard): all Synced, Healthy.
+- 16 of 16 scrape targets up. Prometheus keeps 30 days (max 8 GB) on a local volume.
+- GPU and queue metrics without NVML (ADR-010). From the first day: jobs, GPU time, failures
+  and longest wait per owner over the last 24 h.
+- 10 station alert rules; a test alert reached Telegram through the station's existing bot, and the
+  token never touched Git.
+- Two problems on the first deploy, both fixed in Git: Grafana and its sidecars were OOM-killed at
+  256 / 96 MiB (now 512 / 192 MiB, Recreate strategy), and the exporter's 24 h window was 8 h off because
+  the container ran in UTC while the queue logs local time (now mounts the host's /etc/localtime).
+- Whole cluster with monitoring: ~2.8 GiB of process memory under the 6.5 GiB cap.
