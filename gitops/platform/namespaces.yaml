@@ -30,13 +30,16 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: monitoring
-  labels: {gpu-platform/purpose: observability}
+  labels:
+    gpu-platform/purpose: observability
+    # node-exporter needs the host network, PID namespace and read-only host paths
+    pod-security.kubernetes.io/enforce: privileged
 ---
 apiVersion: v1
 kind: ResourceQuota
 metadata: {name: budget, namespace: monitoring}
 spec:
-  hard: {requests.memory: 1Gi, limits.memory: 2Gi, pods: "15"}
+  hard: {requests.memory: 1536Mi, limits.memory: 3Gi, pods: "15"}
 ---
 apiVersion: v1
 kind: LimitRange

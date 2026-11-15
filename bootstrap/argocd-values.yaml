@@ -12,6 +12,10 @@ controller:
   resources:
     requests: {cpu: 100m, memory: 256Mi}
     limits: {memory: 768Mi}
+  # application metrics (argocd_app_info) for the ArgoAppNotHealthy alert
+  metrics:
+    enabled: true
+    serviceMonitor: {enabled: true}
 repoServer:
   resources:
     requests: {cpu: 50m, memory: 128Mi}

@@ -1,0 +1,101 @@
+# Alerts that matter on this machine. Thresholds come from its history: the October freezes started
+# when available RAM fell under ~2 GiB and swap filled up; the disk has been above 90 % for weeks.
+# summary_ru is what the operator reads in Telegram; summary/description are for everyone else.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: station
+  namespace: monitoring
+spec:
+  groups:
+    - name: station.host
+      rules:
+        - alert: StationDiskAlmostFull
+          expr: |
+            node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
+              / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} < 0.05
+          for: 30m
+          labels: {severity: warning}
+          annotations:
+            summary: Root disk has less than 5 % free
+            summary_ru: "Диск станции: свободно {{ $value | humanizePercentage }}"
+            description: "{{ $value | humanizePercentage }} free on /."
+        - alert: StationDiskCritical
+          expr: |
+            node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} < 40 * 1024^3
+          for: 10m
+          labels: {severity: critical}
+          annotations:
+            summary: Root disk has less than 40 GiB free
+            summary_ru: "Диск станции почти полон: свободно {{ $value | humanize1024 }}Б"
+            description: "Renders and model downloads fail below this."
+        - alert: StationMemoryLow
+          expr: node_memory_MemAvailable_bytes < 2 * 1024^3
+          for: 5m
+          labels: {severity: critical}
+          annotations:
+            summary: Less than 2 GiB of RAM available
+            summary_ru: "Мало памяти: доступно {{ $value | humanize1024 }}Б, это начало зависаний"
+            description: "The October freezes began at this level."
+        - alert: StationSwapHeavy
+          expr: (node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes) > 20 * 1024^3
+          for: 15m
+          labels: {severity: warning}
+          annotations:
+            summary: More than 20 GiB of swap in use
+            summary_ru: "Своп занят на {{ $value | humanize1024 }}Б, станция может тормозить"
+            description: "Heavy swapping precedes OOM freezes on this host."
+    - name: station.gpu
+      rules:
+        - alert: GPUHot
+          expr: station_gpu_temperature_celsius > 85
+          for: 10m
+          labels: {severity: warning}
+          annotations:
+            summary: GPU above 85 C for 10 minutes
+            summary_ru: "Видеокарта греется: {{ $value }} °C"
+            description: "Check the case fans and the current job."
+        - alert: GPUSnapshotStale
+          expr: station_gpu_snapshot_age_seconds > 300 or station_gpu_snapshot_age_seconds < 0
+          for: 5m
+          labels: {severity: warning}
+          annotations:
+            summary: The gpu-dostup snapshot is not updating
+            summary_ru: "Служба доступа к карте (gpu-dostup) не обновляет данные"
+            description: "GPU metrics are stale; the queue's device guard may be down."
+        - alert: GPUQueueLongWait
+          expr: station_gpu_queue_oldest_wait_seconds > 3600
+          for: 5m
+          labels: {severity: warning}
+          annotations:
+            summary: A job has waited for the GPU for over an hour
+            summary_ru: "Задача ждёт видеокарту больше часа"
+            description: "Holder has held the card for {{ with query \"station_gpu_queue_holder_seconds\" }}{{ . | first | value | humanizeDuration }}{{ end }}."
+        - alert: GPUHolderStuck
+          expr: station_gpu_queue_holder_seconds > 4 * 3600 and on() station_gpu_utilization_ratio < 0.05
+          for: 30m
+          labels: {severity: warning}
+          annotations:
+            summary: The GPU holder has held the card for 4 h and is idle
+            summary_ru: "Карту 4 часа держит задача, которая ничего не считает"
+            description: "Probably a hung job; check gpu queue."
+    - name: station.cluster
+      rules:
+        - alert: ClusterNearMemoryCap
+          expr: |
+            sum(container_memory_working_set_bytes{id="/kubepods.slice"})
+              / sum(kube_node_status_allocatable{resource="memory"}) > 0.9
+          for: 10m
+          labels: {severity: warning}
+          annotations:
+            summary: Pods use over 90 % of the cluster memory cap
+            summary_ru: "Кластер подходит к своему лимиту памяти ({{ $value | humanizePercentage }})"
+            description: "Pods will be OOM-killed inside the cap; the host is safe."
+        - alert: ArgoAppNotHealthy
+          expr: argocd_app_info{health_status!~"Healthy|Progressing"} == 1 or argocd_app_info{sync_status!="Synced"} == 1
+          for: 15m
+          labels: {severity: warning}
+          annotations:
+            summary: "Argo CD application {{ $labels.name }} is {{ $labels.health_status }} / {{ $labels.sync_status }}"
+            summary_ru: "Приложение {{ $labels.name }} в Argo CD: {{ $labels.health_status }} / {{ $labels.sync_status }}"
+            description: "The cluster has drifted from Git or a deployment is broken."

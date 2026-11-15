@@ -1,0 +1,70 @@
+# "Station" dashboard: the host, the shared GPU and its queue, the cluster inside its memory cap.
+# Picked up by the Grafana sidecar through the grafana_dashboard label.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-station
+  namespace: monitoring
+  labels: {grafana_dashboard: "1"}
+data:
+  station.json: |
+    {
+      "title": "Station: host, GPU queue, cluster",
+      "uid": "station",
+      "timezone": "browser",
+      "refresh": "30s",
+      "time": {"from": "now-24h", "to": "now"},
+      "schemaVersion": 39,
+      "panels": [
+        {"type": "stat", "title": "Disk free (/)", "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+         "datasource": {"type": "prometheus", "uid": "prometheus"},
+         "fieldConfig": {"defaults": {"unit": "bytes", "thresholds": {"mode": "absolute", "steps": [
+           {"color": "red", "value": null}, {"color": "orange", "value": 42949672960}, {"color": "green", "value": 214748364800}]}}},
+         "targets": [{"expr": "node_filesystem_avail_bytes{mountpoint=\"/\",fstype!~\"tmpfs|overlay\"}"}]},
+        {"type": "stat", "title": "RAM available", "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+         "datasource": {"type": "prometheus", "uid": "prometheus"},
+         "fieldConfig": {"defaults": {"unit": "bytes", "thresholds": {"mode": "absolute", "steps": [
+           {"color": "red", "value": null}, {"color": "orange", "value": 2147483648}, {"color": "green", "value": 6442450944}]}}},
+         "targets": [{"expr": "node_memory_MemAvailable_bytes"}]},
+        {"type": "stat", "title": "Swap used", "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+         "datasource": {"type": "prometheus", "uid": "prometheus"},
+         "fieldConfig": {"defaults": {"unit": "bytes", "thresholds": {"mode": "absolute", "steps": [
+           {"color": "green", "value": null}, {"color": "orange", "value": 10737418240}, {"color": "red", "value": 21474836480}]}}},
+         "targets": [{"expr": "node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes"}]},
+        {"type": "stat", "title": "GPU holder", "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+         "datasource": {"type": "prometheus", "uid": "prometheus"},
+         "options": {"textMode": "name", "colorMode": "none"},
+         "targets": [{"expr": "station_gpu_queue_holder", "legendFormat": "{{owner}}"}]},
+        {"type": "stat", "title": "Waiting for the GPU", "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
+         "datasource": {"type": "prometheus", "uid": "prometheus"},
+         "targets": [{"expr": "sum(station_gpu_queue_waiting)"}]},
+        {"type": "stat", "title": "GPU temperature", "gridPos": {"x": 20, "y": 0, "w": 4, "h": 4},
+         "datasource": {"type": "prometheus", "uid": "prometheus"},
+         "fieldConfig": {"defaults": {"unit": "celsius", "thresholds": {"mode": "absolute", "steps": [
+           {"color": "green", "value": null}, {"color": "orange", "value": 75}, {"color": "red", "value": 85}]}}},
+         "targets": [{"expr": "station_gpu_temperature_celsius"}]},
+        {"type": "timeseries", "title": "GPU utilization and VRAM", "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+         "datasource": {"type": "prometheus", "uid": "prometheus"},
+         "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}},
+         "targets": [
+           {"expr": "station_gpu_utilization_ratio", "legendFormat": "utilization"},
+           {"expr": "station_gpu_memory_used_mib / station_gpu_memory_total_mib", "legendFormat": "VRAM used"}]},
+        {"type": "timeseries", "title": "GPU queue: waiting jobs and longest wait", "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+         "datasource": {"type": "prometheus", "uid": "prometheus"},
+         "targets": [
+           {"expr": "sum by (owner) (station_gpu_queue_waiting)", "legendFormat": "waiting: {{owner}}"},
+           {"expr": "station_gpu_queue_oldest_wait_seconds / 60", "legendFormat": "oldest wait, min"}]},
+        {"type": "bargauge", "title": "GPU hours in the last 24 h", "gridPos": {"x": 0, "y": 12, "w": 8, "h": 7},
+         "datasource": {"type": "prometheus", "uid": "prometheus"},
+         "fieldConfig": {"defaults": {"unit": "h", "min": 0, "max": 24}},
+         "options": {"orientation": "horizontal"},
+         "targets": [{"expr": "station_gpu_busy_seconds_24h / 3600", "legendFormat": "{{owner}}", "instant": true}]},
+        {"type": "timeseries", "title": "Memory: host available vs cluster", "gridPos": {"x": 8, "y": 12, "w": 16, "h": 7},
+         "datasource": {"type": "prometheus", "uid": "prometheus"},
+         "fieldConfig": {"defaults": {"unit": "bytes", "min": 0}},
+         "targets": [
+           {"expr": "node_memory_MemAvailable_bytes", "legendFormat": "host RAM available"},
+           {"expr": "sum(container_memory_working_set_bytes{id=\"/kubepods.slice\"})", "legendFormat": "cluster working set"},
+           {"expr": "sum(kube_node_status_allocatable{resource=\"memory\"})", "legendFormat": "cluster cap"}]}
+      ]
+    }

@@ -1,0 +1,27 @@
+# Template for the Secret "alertmanager-telegram" (key alertmanager.yaml). Real values never go to Git:
+# bin/make-alert-secret fills TOKEN and CHAT_ID from the station's bot config and creates the Secret.
+route:
+  receiver: telegram
+  group_by: [alertname]
+  group_wait: 1m
+  group_interval: 10m
+  repeat_interval: 12h
+  routes:
+    - receiver: blackhole
+      matchers: ['alertname =~ "Watchdog|InfoInhibitor"']
+inhibit_rules:
+  - source_matchers: [severity = critical]
+    target_matchers: [severity = warning]
+    equal: [alertname]
+receivers:
+  - name: blackhole
+  - name: telegram
+    telegram_configs:
+      - bot_token: TOKEN
+        chat_id: CHAT_ID
+        parse_mode: HTML
+        send_resolved: true
+        message: |-
+          {{ range .Alerts }}{{ if eq .Status "firing" }}🔴{{ else }}✅{{ end }} <b>{{ or .Annotations.summary_ru .Annotations.summary }}</b>
+          <i>{{ .Labels.alertname }}{{ if eq $.Status "resolved" }}: всё в норме{{ end }}</i>
+          {{ end }}

@@ -97,3 +97,25 @@ as root at boot and resets the device permissions; the installer masks it.
 **Trade-off.** Kubernetes cannot count GPUs or queue GPU pods itself; a waiting pod holds its CPU and
 memory requests while it waits. On one shared card the existing queue is the better arbiter, and the
 studio sees the cluster as one more polite participant instead of a competitor.
+
+## ADR-010: monitoring without touching the GPU
+
+**Decision.** kube-prometheus-stack (Prometheus, Alertmanager, Grafana, node-exporter,
+kube-state-metrics) managed by Argo CD, with volumes from local-path-provisioner. GPU metrics do not
+come from DCGM or the NVIDIA exporter: both open NVML as root, which resets the device permissions the
+queue relies on (ADR-009), and they would use the card outside the queue. A small sidecar of
+node-exporter (`gitops/monitoring/extras/gpu_queue_exporter.py`) turns what the queue services already
+publish into textfile metrics: the `nvidia-smi` snapshot that the device guard takes without root,
+the waiting list, the current holder and the job log (jobs, failures, GPU hours and longest wait per
+owner over 24 h). It mounts `/run/gpu` and `/srv` read-only as directories, because the dispatcher
+replaces its state files atomically and a single-file bind mount would keep the old inode.
+**Alerts** are tuned to this host's history rather than generic defaults: available RAM under 2 GiB and
+swap over 20 GiB (where the October freezes began), root disk under 5 % or 40 GiB, GPU over 85 C,
+a stale GPU snapshot (the device guard is down), a job waiting over an hour, a holder idle for 4 h,
+the cluster near its memory cap, an Argo CD application out of sync. kubeadm binds etcd, the
+scheduler, the controller manager and kube-proxy metrics to localhost, so those scrapers and their
+rules are off instead of reporting "down" forever. `Watchdog` goes to a null receiver.
+**Secrets.** The Telegram token and chat id stay out of Git. `bin/make-alert-secret` reads the station's
+existing bot config (root only) and creates the Alertmanager config Secret from
+`gitops/monitoring/alertmanager.example.yaml`.
+**Budget.** Explicit requests 760 MiB, limits 2 GiB; the `monitoring` namespace quota is 1.5 / 3 GiB.

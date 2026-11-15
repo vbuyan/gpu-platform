@@ -1,0 +1,108 @@
+# kube-prometheus-stack for a single-node cluster capped at ~6.5 GiB (ADR-002, ADR-010).
+# Requests ~0.8 GiB, limits ~2.4 GiB. The control-plane components bind to 127.0.0.1 on kubeadm,
+# so their scrapers and rules are off instead of alerting "down" forever.
+crds:
+  enabled: true
+
+windowsMonitoring: {enabled: false}
+kubeEtcd: {enabled: false}
+kubeScheduler: {enabled: false}
+kubeControllerManager: {enabled: false}
+kubeProxy: {enabled: false}
+
+defaultRules:
+  rules:
+    etcd: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeControllerManager: false
+    kubeProxy: false
+    windows: false
+
+prometheusOperator:
+  admissionWebhooks: {enabled: false}   # no cert jobs; rules are validated by the operator on load
+  tls: {enabled: false}
+  resources:
+    requests: {cpu: 20m, memory: 64Mi}
+    limits: {memory: 192Mi}
+
+prometheus:
+  prometheusSpec:
+    retention: 30d
+    retentionSize: 8GB
+    scrapeInterval: 30s
+    # pick up every ServiceMonitor and PrometheusRule in the cluster, not only this release's
+    ruleSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+    resources:
+      requests: {cpu: 100m, memory: 384Mi}
+      limits: {memory: 1Gi}
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests: {storage: 10Gi}
+
+alertmanager:
+  alertmanagerSpec:
+    # Telegram token and chat id never go to Git: bin/make-alert-secret builds this Secret
+    # from the station's existing bot config (see gitops/monitoring/alertmanager.example.yaml).
+    useExistingSecret: true
+    configSecret: alertmanager-telegram
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {memory: 96Mi}
+
+grafana:
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    size: 1Gi
+  resources:
+    requests: {cpu: 25m, memory: 96Mi}
+    limits: {memory: 256Mi}
+  sidecar:
+    resources:
+      requests: {cpu: 5m, memory: 48Mi}
+      limits: {memory: 96Mi}
+    dashboards:
+      searchNamespace: ALL
+  # the UI is reached only through kubectl port-forward over SSH
+
+kube-state-metrics:
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 128Mi}
+
+prometheus-node-exporter:
+  resources:
+    requests: {cpu: 20m, memory: 32Mi}
+    limits: {memory: 96Mi}
+  extraArgs:
+    - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run/containerd/.+|var/lib/docker/.+|var/lib/kubelet/.+)($|/)
+    - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs|erofs)$
+    - --collector.textfile.directory=/textfile
+  # GPU and GPU-queue metrics: a sidecar reads what the queue services publish (never NVML, ADR-010)
+  sidecarVolumeMount:
+    - {name: textfile, mountPath: /textfile, readOnly: false}
+  sidecarHostVolumeMounts:
+    - {name: host-run-gpu, hostPath: /run/gpu, mountPath: /host/run/gpu, readOnly: true}
+    # the directory, not the files: the dispatcher replaces gpu.who atomically (rename), and a
+    # single-file bind mount would keep showing the old inode
+    - {name: host-srv, hostPath: /srv, mountPath: /host/srv, readOnly: true}
+  configmaps:
+    - {name: gpu-queue-exporter, mountPath: /exporter}
+  sidecars:
+    - name: gpu-queue-exporter
+      image: python:3.12.15-slim
+      command: [python3, -I, /exporter/gpu_queue_exporter.py]
+      resources:
+        requests: {cpu: 10m, memory: 24Mi}
+        limits: {memory: 64Mi}
+      volumeMounts:
+        - {name: gpu-queue-exporter, mountPath: /exporter, readOnly: true}

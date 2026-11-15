@@ -26,7 +26,7 @@ without disrupting the people who depend on the machine.
 | 2 | GitOps: Argo CD syncs everything from this repo | done (2026-11-15) |
 | 3 | GPU: CDI + the shared queue, admission policy instead of a device plugin (ADR-009) | done (2026-11-15) |
 | 4 | Workloads: ComfyUI and Ollama as Helm charts, a render Job pipeline | planned |
-| 5 | Observability: Prometheus, Grafana, DCGM GPU metrics, alerts, SLOs | planned |
+| 5 | Observability: Prometheus, Grafana, GPU-queue metrics without NVML, Telegram alerts (ADR-010) | in progress |
 | 6 | CI: GitHub Actions builds, scans and publishes images to GHCR | planned |
 | 7 | Terraform: the same stack declared as code, plus an optional one-day cloud replica | planned |
 | 8 | Write-ups: architecture, decisions, two incident postmortems with numbers | planned |
