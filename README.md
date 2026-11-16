@@ -30,7 +30,7 @@ without disrupting the people who depend on the machine.
 | 3 | GPU: CDI + the shared queue, admission policy instead of a device plugin (ADR-009) | done (2026-11-15) |
 | 4 | Workloads: ComfyUI and Ollama as Helm charts, a render Job pipeline | planned |
 | 5 | Observability: Prometheus, Grafana, GPU-queue metrics without NVML, Telegram alerts (ADR-010) | done (2026-11-15) |
-| 6 | CI: shellcheck, yamllint, unit tests, kubeconform on rendered charts, admission policy on kind; exporter image scanned and pushed to GHCR | in progress |
+| 6 | CI: shellcheck, yamllint, unit tests, kubeconform on rendered charts, admission policy on kind; exporter image scanned and pushed to GHCR | done (2026-11-16) |
 | 7 | Terraform: the same stack declared as code, plus an optional one-day cloud replica | planned |
 | 8 | Write-ups: architecture, decisions, two incident postmortems with numbers | planned |
 
@@ -104,3 +104,19 @@ sudo bash bootstrap/install-kubernetes.sh --rollback # remove everything
   256 / 96 MiB (now 512 / 192 MiB, Recreate strategy), and the exporter's 24 h window was 8 h off because
   the container ran in UTC while the queue logs local time (now mounts the host's /etc/localtime).
 - Whole cluster with monitoring: ~2.8 GiB of process memory under the 6.5 GiB cap.
+
+## Stage 6 result (2026-11-16)
+
+- `ci` on every push and pull request, green on the first run:
+  - shellcheck on every installer and helper, yamllint on all YAML;
+  - 10 unit tests: the GPU-queue exporter on fixture files, and the queue wrapper `turn` against a fake
+    dispatcher (waits, keeps the connection across exec, releases on exit, reports refusals);
+  - every chart Argo CD deploys rendered with this repo's values and validated by kubeconform (163 objects);
+  - a throwaway kind cluster with the platform layer applied: 12 admission cases, 1 correct GPU pod
+    admitted, 1 ordinary pod admitted, 10 bypass attempts denied.
+- `image` builds the exporter, scans it with Trivy and pushes it to `ghcr.io/vbuyan/gpu-queue-exporter`.
+  The first scan blocked the image: the Python base lagged behind Debian security fixes (4 fixable HIGH
+  CVEs in apt and zlib). The Dockerfile now applies the updates and drops pip.
+- Third-party actions are pinned; the scanner action is pinned by commit SHA because its tags were
+  re-pointed in a 2026 supply-chain incident.
+- The new checks found 14 shellcheck issues in code that already ran in production (mostly quoting); all fixed.
