@@ -8,7 +8,8 @@ LABEL org.opencontainers.image.source="https://github.com/vbuyan/gpu-platform" \
 RUN apt-get update && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && python -m pip install --no-cache-dir --break-system-packages \
-         transformers==5.2.0 accelerate==1.14.0 av==19.0.1
+         transformers==5.2.0 accelerate==1.14.0 av==19.0.1 \
+         pillow==13.0.0   # base ships 12.3.0: 8 critical CVEs (Trivy, 2026-11-16)
 COPY images/subtitles/subtitles.py /app/subtitles.py
 ENV HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HOME=/tmp
 USER 2950:2950
