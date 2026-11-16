@@ -70,7 +70,9 @@ spec:
           annotations:
             summary: A job has waited for the GPU for over an hour
             summary_ru: "Задача ждёт видеокарту больше часа"
-            description: "Holder has held the card for {{ with query \"station_gpu_queue_holder_seconds\" }}{{ . | first | value | humanizeDuration }}{{ end }}."
+            description: >-
+              Holder has held the card for
+              {{ with query "station_gpu_queue_holder_seconds" }}{{ . | first | value | humanizeDuration }}{{ end }}.
         - alert: GPUHolderStuck
           expr: station_gpu_queue_holder_seconds > 4 * 3600 and on() station_gpu_utilization_ratio < 0.05
           for: 30m

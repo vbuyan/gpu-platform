@@ -87,7 +87,7 @@ avail_mb=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo)
 [ "$avail_mb" -ge 3500 ] || { echo "Only ${avail_mb} MB RAM available; run when the station is less busy"; exit 1; }
 NODE_IP=$(ip route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}')
 TS_IP=$(tailscale ip -4 | head -1)
-[ -n "$NODE_IP" ] && [ -n "$TS_IP" ] || { echo "Cannot detect node or Tailscale IP"; exit 1; }
+if [ -z "$NODE_IP" ] || [ -z "$TS_IP" ]; then echo "Cannot detect node or Tailscale IP"; exit 1; fi
 echo "   node IP $NODE_IP, Tailscale IP $TS_IP, ${free_gb} GB disk, ${avail_mb} MB RAM available"
 # a half-configured package makes every apt-get install fail halfway; refuse before touching anything
 broken=$(dpkg --audit 2>&1 || true)
@@ -128,15 +128,15 @@ sysctl --system >/dev/null
 if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then
   echo "1b. Host firewall exceptions for the cluster (ufw)"
   LAN_IF=$(ip route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1)}')
-  C="comment gpu-platform"
-  ufw insert 1 allow out on "$LAN_IF" to "$NODE_IP" $C >/dev/null           # node to itself via a Service IP
-  ufw insert 1 allow out on "$LAN_IF" to 10.96.0.0/12 $C >/dev/null         # Service IPs before DNAT
-  ufw insert 1 allow out on "$LAN_IF" to "$POD_CIDR" $C >/dev/null          # pod IPs before DNAT
-  ufw allow in from "$POD_CIDR" $C >/dev/null                               # pods to the API server, kubelet
-  ufw route deny from "$POD_CIDR" to 192.168.0.0/16 $C >/dev/null           # pods never reach the home LAN
-  ufw route deny from "$POD_CIDR" to 172.16.0.0/12 $C >/dev/null
-  ufw route deny from "$POD_CIDR" to 100.64.0.0/10 $C >/dev/null            # nor the tailnet
-  ufw route allow from "$POD_CIDR" $C >/dev/null                            # pods to the internet
+  C=(comment gpu-platform)
+  ufw insert 1 allow out on "$LAN_IF" to "$NODE_IP" "${C[@]}" >/dev/null           # node to itself via a Service IP
+  ufw insert 1 allow out on "$LAN_IF" to 10.96.0.0/12 "${C[@]}" >/dev/null         # Service IPs before DNAT
+  ufw insert 1 allow out on "$LAN_IF" to "$POD_CIDR" "${C[@]}" >/dev/null          # pod IPs before DNAT
+  ufw allow in from "$POD_CIDR" "${C[@]}" >/dev/null                               # pods to the API server, kubelet
+  ufw route deny from "$POD_CIDR" to 192.168.0.0/16 "${C[@]}" >/dev/null           # pods never reach the home LAN
+  ufw route deny from "$POD_CIDR" to 172.16.0.0/12 "${C[@]}" >/dev/null
+  ufw route deny from "$POD_CIDR" to 100.64.0.0/10 "${C[@]}" >/dev/null            # nor the tailnet
+  ufw route allow from "$POD_CIDR" "${C[@]}" >/dev/null                            # pods to the internet
   ufw status numbered | grep gpu-platform | sed 's/^/   /'
 fi
 
@@ -202,7 +202,7 @@ systemctl disable kubelet containerd >/dev/null 2>&1   # do not start at boot; `
 kubectl run smoke-dns --image=busybox:1.36 --restart=Never -- nslookup kubernetes.default.svc.cluster.local >/dev/null
 kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/smoke-dns --timeout=3m && echo "   DNS inside the cluster works"
 kubectl delete pod smoke-dns --wait=false >/dev/null
-echo "   kubepods memory cap: $(cat /sys/fs/cgroup/kubepods.slice/memory.max 2>/dev/null | awk '{printf "%.1f GiB", $1/1073741824}')"
+echo "   kubepods memory cap: $(awk '{printf "%.1f GiB", $1/1073741824}' /sys/fs/cgroup/kubepods.slice/memory.max 2>/dev/null)"
 kubectl get nodes -o wide
 systemctl stop "$TIMER-install.timer" 2>/dev/null || true
 arm "$TIMER" 20

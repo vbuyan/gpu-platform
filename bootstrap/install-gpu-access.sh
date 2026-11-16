@@ -48,6 +48,8 @@ id kube-gpu >/dev/null 2>&1 || useradd -r -u "$KUBE_GPU_UID" -g kube-gpu -G gpu 
 echo "2. nvidia-container-toolkit-base $TOOLKIT_VERSION"
 install -d -m 755 /etc/apt/keyrings
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor --yes -o /etc/apt/keyrings/nvidia-container-toolkit.gpg
+# $(ARCH) is expanded by apt, not by the shell
+# shellcheck disable=SC2016
 echo 'deb [signed-by=/etc/apt/keyrings/nvidia-container-toolkit.gpg] https://nvidia.github.io/libnvidia-container/stable/deb/$(ARCH) /' \
   > /etc/apt/sources.list.d/nvidia-container-toolkit.list
 DEBIAN_FRONTEND=noninteractive apt-get update -qq

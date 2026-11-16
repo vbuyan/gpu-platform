@@ -29,7 +29,8 @@ case "${1:-status}" in
     need_root off
     systemctl stop kubelet 2>/dev/null || true
     if systemctl is-active -q containerd; then
-      crictl --runtime-endpoint "$CRI" stopp $(crictl --runtime-endpoint "$CRI" pods -q) >/dev/null 2>&1 || true
+      mapfile -t pods < <(crictl --runtime-endpoint "$CRI" pods -q 2>/dev/null)
+      if [ "${#pods[@]}" -gt 0 ]; then crictl --runtime-endpoint "$CRI" stopp "${pods[@]}" >/dev/null 2>&1 || true; fi
       systemctl stop containerd
     fi
     pkill -f containerd-shim-runc-v2 2>/dev/null || true

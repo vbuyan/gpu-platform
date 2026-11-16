@@ -1,0 +1,51 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: shellcheck
+        run: shellcheck bootstrap/*.sh bin/k8s bin/set-repo-url bin/make-alert-secret ci/*.sh
+      - name: yamllint
+        run: pip install yamllint==1.37.1 && yamllint -s .
+      - name: unit tests (exporter, queue wrapper)
+        run: pip install pytest==8.4.1 pyyaml==6.0.2 && pytest -q tests
+
+  manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with: {version: v3.18.4}
+      - name: install kubeconform
+        run: |
+          curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
+            | tar xz -C /usr/local/bin kubeconform
+      - name: render and validate everything Argo CD applies
+        run: ci/validate-manifests.sh
+
+  admission-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: helm/kind-action@v1
+        with: {cluster_name: policy}
+      - name: apply the platform layer
+        run: |
+          kubectl apply -f gitops/platform/namespaces.yaml -f gitops/platform/runtimeclass.yaml \
+            -f gitops/platform/gpu-policy.yaml
+          sleep 5   # the policy takes a moment to become active
+      - name: twelve admit/deny cases for GPU pods
+        run: pip install pyyaml==6.0.2 && python3 tests/check_admission_policy.py

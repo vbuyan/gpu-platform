@@ -1,5 +1,8 @@
 # gpu-platform
 
+[![ci](https://github.com/vbuyan/gpu-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/vbuyan/gpu-platform/actions/workflows/ci.yml)
+[![image](https://github.com/vbuyan/gpu-platform/actions/workflows/image.yml/badge.svg)](https://github.com/vbuyan/gpu-platform/actions/workflows/image.yml)
+
 Kubernetes platform for generative-media workloads on a shared GPU workstation.
 
 The workstation already runs a production setup: one RTX 3090 shared by two teams through a
@@ -27,7 +30,7 @@ without disrupting the people who depend on the machine.
 | 3 | GPU: CDI + the shared queue, admission policy instead of a device plugin (ADR-009) | done (2026-11-15) |
 | 4 | Workloads: ComfyUI and Ollama as Helm charts, a render Job pipeline | planned |
 | 5 | Observability: Prometheus, Grafana, GPU-queue metrics without NVML, Telegram alerts (ADR-010) | done (2026-11-15) |
-| 6 | CI: GitHub Actions builds, scans and publishes images to GHCR | planned |
+| 6 | CI: shellcheck, yamllint, unit tests, kubeconform on rendered charts, admission policy on kind; exporter image scanned and pushed to GHCR | in progress |
 | 7 | Terraform: the same stack declared as code, plus an optional one-day cloud replica | planned |
 | 8 | Write-ups: architecture, decisions, two incident postmortems with numbers | planned |
 
@@ -38,6 +41,9 @@ bootstrap/   host install: install-kubernetes.sh, kubeadm-config.yaml, cilium-va
 bin/k8s      start / stop / status of the on-demand cluster
 gpu-queue/   turn: entrypoint of GPU pods, waits for the station GPU queue
 examples/    gpu-smoke-job.yaml: fp16 matmul benchmark through the queue
+tests/       unit tests (exporter, queue wrapper) and the admission policy check
+ci/          validate-manifests.sh: render every chart with the repo values, validate with kubeconform
+images/      Dockerfile of the GPU-queue exporter (built, scanned and pushed by .github/workflows/image.yml)
 gitops/      Argo CD app of apps: root-app.yaml -> apps/ -> platform/ (namespaces, quotas, network policy)
 docs/        decisions (ADRs), architecture, postmortems
 ```

@@ -59,6 +59,7 @@ alertmanager:
       limits: {memory: 96Mi}
 
 grafana:
+  # the UI is reached only through kubectl port-forward over SSH
   persistence:
     enabled: true
     storageClassName: local-path
@@ -75,7 +76,6 @@ grafana:
       limits: {memory: 192Mi}
     dashboards:
       searchNamespace: ALL
-  # the UI is reached only through kubectl port-forward over SSH
 
 kube-state-metrics:
   resources:

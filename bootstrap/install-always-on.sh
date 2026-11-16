@@ -57,7 +57,7 @@ systemctl enable containerd kubelet
 
 echo "2. kubelet evicts pods when the host is short of memory (soft 4 GiB / 30 s, hard 2 GiB)"
 set_eviction 2Gi 4Gi
-for i in $(seq 1 60); do kubectl get --raw /readyz >/dev/null 2>&1 && break; sleep 3; done
+for _ in $(seq 1 60); do kubectl get --raw /readyz >/dev/null 2>&1 && break; sleep 3; done
 grep -A1 -E "^eviction(Hard|Soft):" "$KCONF" | sed 's/^/   /'
 
 echo "3. systemd-oomd kills the cluster before studio jobs (kubepods.slice limit 20 %, system.slice 50 %)"
