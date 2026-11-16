@@ -31,7 +31,7 @@ without disrupting the people who depend on the machine.
 | 4 | Workloads: ComfyUI and Ollama as Helm charts, a render Job pipeline | planned |
 | 5 | Observability: Prometheus, Grafana, GPU-queue metrics without NVML, Telegram alerts (ADR-010) | done (2026-11-15) |
 | 6 | CI: shellcheck, yamllint, unit tests, kubeconform on rendered charts, admission policy on kind; exporter image scanned and pushed to GHCR | done (2026-11-16) |
-| 7 | Terraform: Argo CD bootstrap and the GitHub repository as code, state in the cluster (ADR-012) | in progress |
+| 7 | Terraform: Argo CD bootstrap and the GitHub repository as code, state in the cluster (ADR-012) | done (2026-11-16) |
 | 8 | Write-ups: architecture, decisions, two incident postmortems with numbers | planned |
 
 ## Layout
@@ -121,3 +121,15 @@ sudo bash bootstrap/install-kubernetes.sh --rollback # remove everything
 - Third-party actions are pinned; the scanner action is pinned by commit SHA because its tags were
   re-pointed in a 2026 supply-chain incident.
 - The new checks found 14 shellcheck issues in code that already ran in production (mostly quoting); all fixed.
+
+## Stage 7 result (2026-11-16)
+
+- `terraform/cluster` adopted the running Argo CD release and the root Application with `import`
+  blocks: 2 imported, 0 created, 0 destroyed, one no-op `helm upgrade`. `plan -detailed-exitcode` is 0.
+- `terraform/github` adopted the repository and added a protected `main`: required checks
+  `lint-and-test`, `manifests`, `admission-policy`, `terraform`; linear history; no force pushes or
+  deletion; vulnerability alerts on. `plan -detailed-exitcode` is 0.
+- State for both lives in the cluster (`kubernetes` backend, Secrets in `kube-system`).
+- CI got a fourth job: `terraform fmt -check` and `terraform validate` for both modules.
+- Side finding while adopting: kubelet's default disk threshold (5 %, ~90 GiB here) had evicted 209 pods
+  in one night on a disk the studio keeps 95 % full; now an absolute 20 GiB (ADR-011).
