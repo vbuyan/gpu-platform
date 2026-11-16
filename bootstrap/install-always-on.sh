@@ -24,6 +24,10 @@ import sys, yaml
 path, hard, soft = sys.argv[1], sys.argv[2], sys.argv[3]
 c = yaml.safe_load(open(path))
 c.setdefault("evictionHard", {})["memory.available"] = hard
+# 5 % of a 1.8 TB disk is ~90 GiB and the studio keeps this disk ~95 % full: the percentage
+# evicted every pod three times in one night (ADR-011). Pods need far less; use an absolute floor.
+c["evictionHard"]["nodefs.available"] = "20Gi" if soft else "5%"
+c["evictionHard"]["imagefs.available"] = "20Gi" if soft else "5%"
 if soft:
     c["evictionSoft"] = {"memory.available": soft}
     c["evictionSoftGracePeriod"] = {"memory.available": "30s"}
@@ -55,7 +59,7 @@ systemctl is-active -q kubelet || { echo "Start the cluster first: sudo k8s on";
 echo "1. Start containerd and kubelet at boot"
 systemctl enable containerd kubelet
 
-echo "2. kubelet evicts pods when the host is short of memory (soft 4 GiB / 30 s, hard 2 GiB)"
+echo "2. kubelet evicts pods when the host is short of memory (soft 4 GiB / 30 s, hard 2 GiB) or disk (20 GiB)"
 set_eviction 2Gi 4Gi
 for _ in $(seq 1 60); do kubectl get --raw /readyz >/dev/null 2>&1 && break; sleep 3; done
 grep -A1 -E "^eviction(Hard|Soft):" "$KCONF" | sed 's/^/   /'

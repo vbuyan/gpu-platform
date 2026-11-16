@@ -31,7 +31,7 @@ without disrupting the people who depend on the machine.
 | 4 | Workloads: ComfyUI and Ollama as Helm charts, a render Job pipeline | planned |
 | 5 | Observability: Prometheus, Grafana, GPU-queue metrics without NVML, Telegram alerts (ADR-010) | done (2026-11-15) |
 | 6 | CI: shellcheck, yamllint, unit tests, kubeconform on rendered charts, admission policy on kind; exporter image scanned and pushed to GHCR | done (2026-11-16) |
-| 7 | Terraform: the same stack declared as code, plus an optional one-day cloud replica | planned |
+| 7 | Terraform: Argo CD bootstrap and the GitHub repository as code, state in the cluster (ADR-012) | in progress |
 | 8 | Write-ups: architecture, decisions, two incident postmortems with numbers | planned |
 
 ## Layout
@@ -43,6 +43,7 @@ gpu-queue/   turn: entrypoint of GPU pods, waits for the station GPU queue
 examples/    gpu-smoke-job.yaml: fp16 matmul benchmark through the queue
 tests/       unit tests (exporter, queue wrapper) and the admission policy check
 ci/          validate-manifests.sh: render every chart with the repo values, validate with kubeconform
+terraform/   cluster (Argo CD bootstrap, root app) and github (repository, branch protection)
 images/      Dockerfile of the GPU-queue exporter (built, scanned and pushed by .github/workflows/image.yml)
 gitops/      Argo CD app of apps: root-app.yaml -> apps/ -> platform/ (namespaces, quotas, network policy)
 docs/        decisions (ADRs), architecture, postmortems

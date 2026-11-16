@@ -135,6 +135,29 @@ while a render runs: the October freezes began at about 2 GiB available.
 - systemd-oomd watches `kubepods.slice` with a 20 % memory-pressure limit, stricter than the 50 %
   on `system.slice`, so under real pressure it kills cluster pods before studio jobs.
 - The 6.5 GiB cap (ADR-002) still bounds the cluster from above.
+**Disk, found the first night.** The default `nodefs.available: 5%` means ~90 GiB on this 1.8 TB disk,
+which the studio keeps about 95 % full: kubelet evicted every pod three times in one night (209
+evicted pods, all of them on disk pressure, none on memory). The floor is now an absolute 20 GiB.
 **Review.** The `StationMemoryLow` alert and the "Memory: host available vs cluster" panel show whether
 this costs the studio anything. If available memory often drops under 3 GiB with the cluster running,
 `install-always-on.sh --rollback` returns to on-demand.
+
+## ADR-012: Terraform for what Git cannot hold by itself
+
+**Context.** Argo CD already applies everything inside the cluster from Git. Two things sit outside
+that loop: the bootstrap (installing Argo CD and the root Application, which no Argo CD can do for
+itself) and the GitHub repository (settings, topics, security features, branch protection).
+**Decision.** Two small root modules, both adopting what already existed with `import` blocks instead
+of recreating it:
+- `terraform/cluster`: `helm_release.argocd` (bootstrap only: versions and values are ignored after
+  the first install because Argo CD upgrades itself, ADR-008) and `kubernetes_manifest.root`.
+- `terraform/github`: the repository and a protected `main` that requires the CI jobs
+  `lint-and-test`, `manifests`, `admission-policy` and `terraform`; linear history, no force pushes.
+  The owner can still push a hotfix (`enforce_admins = false`).
+**State** lives in the cluster it describes (backend `kubernetes`, Secrets in `kube-system`, locking
+through a Lease): no cloud bucket, nothing on a laptop. The GitHub token comes from the environment
+and never enters the state.
+**Adoption.** `import` brought the running Argo CD under Terraform with one no-op `helm upgrade` (the
+imported release has no chart repository in state; ignoring `repository` makes the provider fail to
+locate the chart). After apply, `terraform plan -detailed-exitcode` returns 0.
+**CI** runs `terraform fmt -check` and `terraform validate` for both modules on every push.

@@ -49,3 +49,17 @@ jobs:
           sleep 5   # the policy takes a moment to become active
       - name: twelve admit/deny cases for GPU pods
         run: pip install pyyaml==6.0.2 && python3 tests/check_admission_policy.py
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v4
+        with: {terraform_version: 1.17.2, terraform_wrapper: false}
+      - name: fmt
+        run: terraform fmt -check -recursive terraform
+      - name: validate both modules
+        run: |
+          for d in terraform/*/; do
+            (cd "$d" && terraform init -backend=false -input=false >/dev/null && terraform validate)
+          done
