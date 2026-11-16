@@ -33,7 +33,7 @@ spec:
             - name: whisper
               image: ghcr.io/vbuyan/subtitles:latest
               imagePullPolicy: Always
-              command: [/opt/gpu-queue/turn, python3, -I, /app/subtitles.py]
+              command: [/opt/gpu-queue/turn, python, -I, /app/subtitles.py]
               env:
                 - {name: GPU_WHAT, value: "k8s subtitles (whisper large-v3-turbo)"}
                 - {name: GPU_FON, value: "1"}          # night background: the studio goes first
