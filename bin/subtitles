@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Hand videos to the nightly subtitles job, or run it right away.
+#   subtitles add FILE...   hard-link (or copy) files into ~/k8s-media/inbox
+#   subtitles now           start a job now instead of waiting for 01:15
+#   subtitles status        pending files, finished subtitles, last jobs
+#   subtitles setup         create the folders and copy the Whisper weights from the HF cache (once)
+set -euo pipefail
+MEDIA=$HOME/k8s-media
+MODELS=$HOME/k8s-models
+case "${1:-status}" in
+  setup)
+    mkdir -p "$MEDIA/inbox" "$MEDIA/outbox" "$MODELS"
+    chmod 755 "$MEDIA" "$MEDIA/inbox" "$MODELS"
+    chmod 1777 "$MEDIA/outbox"            # the pod writes as kube-gpu (uid 2950)
+    snap=$(find "$HOME"/.cache/huggingface/hub/models--openai--whisper-large-v3-turbo/snapshots -mindepth 1 -maxdepth 1 -type d | head -1)
+    if [ ! -f "$MODELS/whisper-large-v3-turbo/model.safetensors" ]; then
+      cp -rL "$snap" "$MODELS/whisper-large-v3-turbo"
+    fi
+    chmod -R a+rX "$MODELS"
+    du -sh "$MODELS/whisper-large-v3-turbo"
+    ;;
+  add)
+    shift
+    for f in "$@"; do ln -f "$f" "$MEDIA/inbox/" 2>/dev/null || cp "$f" "$MEDIA/inbox/"; echo "queued: $(basename "$f")"; done
+    ;;
+  now)
+    kubectl -n jobs create job --from=cronjob/subtitles "subtitles-$(date +%m%d-%H%M)"
+    ;;
+  status)
+    echo "pending:"; find "$MEDIA/inbox" -maxdepth 1 -type f -printf '  %f\n' | sort
+    echo "done:"; find "$MEDIA/outbox" -maxdepth 1 -name '*.srt' -printf '  %f\n' | sort
+    kubectl -n jobs get cronjobs,jobs 2>/dev/null | grep -E "^NAME|subtitles" || true
+    ;;
+  *) echo "usage: subtitles add FILE... | now | status | setup"; exit 2 ;;
+esac

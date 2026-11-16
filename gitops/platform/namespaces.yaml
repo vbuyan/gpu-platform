@@ -14,7 +14,7 @@ apiVersion: v1
 kind: ResourceQuota
 metadata: {name: budget, namespace: jobs}
 spec:
-  hard: {requests.memory: 2Gi, limits.memory: 3Gi, requests.cpu: "2", pods: "10"}
+  hard: {requests.memory: 2Gi, limits.memory: 4Gi, requests.cpu: "2", pods: "10"}
 ---
 apiVersion: v1
 kind: LimitRange
@@ -24,7 +24,7 @@ spec:
     - type: Container
       default: {memory: 256Mi}
       defaultRequest: {cpu: 50m, memory: 64Mi}
-      max: {memory: 2Gi}
+      max: {memory: 3Gi}   # Whisper large-v3-turbo loads ~1.6 GiB of weights through RAM
 ---
 apiVersion: v1
 kind: Namespace

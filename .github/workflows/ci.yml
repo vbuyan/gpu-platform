@@ -17,7 +17,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - name: shellcheck
-        run: shellcheck bootstrap/*.sh bin/k8s bin/set-repo-url bin/make-alert-secret ci/*.sh
+        run: shellcheck bootstrap/*.sh bin/k8s bin/set-repo-url bin/make-alert-secret bin/subtitles ci/*.sh
       - name: yamllint
         run: pip install yamllint==1.37.1 && yamllint -s .
       - name: unit tests (exporter, queue wrapper)

@@ -161,3 +161,21 @@ and never enters the state.
 imported release has no chart repository in state; ignoring `repository` makes the provider fail to
 locate the chart). After apply, `terraform plan -detailed-exitcode` returns 0.
 **CI** runs `terraform fmt -check` and `terraform validate` for both modules on every push.
+
+## ADR-013: the first real workload is nightly subtitles
+
+**Context.** Stage 4 needed work the studio actually wants, not a demo, and nothing the host already
+does. The studio publishes English videos; video platforms use captions for search and automatic
+dubbing, and the host had no captioning pipeline.
+**Decision.** A CronJob in `jobs` at 01:15 station time: every audio or video file in
+`~/k8s-media/inbox` without a matching `.srt` gets subtitles from Whisper large-v3-turbo, written to
+`~/k8s-media/outbox` as `.srt` plus `.txt`. It joins the GPU queue as a background job, so at night
+the studio goes first. Audio is decoded with PyAV, so the image needs no ffmpeg binary.
+**Data.** Two static local PersistentVolumes (media folders, and the model weights copied once from the
+host's Hugging Face cache, mounted read-only). Pods only see PVCs, so `jobs` keeps Pod Security
+`restricted`. The image (PyTorch CUDA base + transformers) is built, scanned and pushed by CI; it
+blocks on critical CVEs only, because the CUDA/PyTorch base always carries some high ones.
+**Known weakness.** Whisper drops or mangles numbers (seen in earlier runs on this host); the `.txt` makes them
+quick to check. When the script is known, forced alignment of the script is the better tool.
+**Budget.** The container limit is 3 GiB (weights pass through RAM on load); the `jobs` LimitRange
+maximum went from 2 to 3 GiB and its quota from 3 to 4 GiB.

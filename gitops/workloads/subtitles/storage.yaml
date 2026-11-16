@@ -1,0 +1,58 @@
+# Static local volumes on the node: the media folders the operator drops files into and reads
+# results from, and the Whisper weights already on the host (copied once, mounted read-only).
+# Pods only see PersistentVolumeClaims, so namespace jobs keeps Pod Security "restricted".
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: subtitles-media
+spec:
+  capacity: {storage: 50Gi}
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: station-local
+  local: {path: /home/purpose/k8s-media}
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - {key: kubernetes.io/hostname, operator: In, values: [ai-station]}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: whisper-models
+spec:
+  capacity: {storage: 5Gi}
+  accessModes: [ReadOnlyMany]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: station-local
+  local: {path: /home/purpose/k8s-models}
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - {key: kubernetes.io/hostname, operator: In, values: [ai-station]}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: subtitles-media
+  namespace: jobs
+spec:
+  storageClassName: station-local
+  volumeName: subtitles-media
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: {storage: 50Gi}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: whisper-models
+  namespace: jobs
+spec:
+  storageClassName: station-local
+  volumeName: whisper-models
+  accessModes: [ReadOnlyMany]
+  resources:
+    requests: {storage: 5Gi}

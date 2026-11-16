@@ -1,0 +1,55 @@
+# Nightly subtitles: ~/k8s-media/inbox -> ~/k8s-media/outbox (.srt + .txt).
+# Run now:  kubectl -n jobs create job --from=cronjob/subtitles subtitles-now
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: subtitles
+  namespace: jobs
+spec:
+  schedule: "15 1 * * *"
+  timeZone: America/Los_Angeles
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 21600       # queue wait included; the night is long enough
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          annotations:
+            cdi.k8s.io/gpu: nvidia.com/gpu=all,station.local/gpu-queue=socket
+        spec:
+          restartPolicy: Never
+          runtimeClassName: gpu-queue
+          securityContext:
+            runAsUser: 2950
+            runAsGroup: 2950
+            runAsNonRoot: true
+            supplementalGroups: [1002, 983]
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: whisper
+              image: ghcr.io/vbuyan/subtitles:latest
+              imagePullPolicy: Always
+              command: [/opt/gpu-queue/turn, python3, -I, /app/subtitles.py]
+              env:
+                - {name: GPU_WHAT, value: "k8s subtitles (whisper large-v3-turbo)"}
+                - {name: GPU_FON, value: "1"}          # night background: the studio goes first
+                - {name: GPU_NEED_MB, value: "6000"}
+                - {name: LANGUAGE, value: en}
+              resources:
+                requests: {cpu: "1", memory: 1Gi}
+                limits: {memory: 3Gi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+              volumeMounts:
+                - {name: media, mountPath: /media}
+                - {name: models, mountPath: /models, readOnly: true}
+          volumes:
+            - name: media
+              persistentVolumeClaim: {claimName: subtitles-media}
+            - name: models
+              persistentVolumeClaim: {claimName: whisper-models, readOnly: true}

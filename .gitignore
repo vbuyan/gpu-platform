@@ -6,3 +6,5 @@ admin.conf
 *.tfstate.*
 .terraform/
 *.tfplan
+__pycache__/
+.pytest_cache/

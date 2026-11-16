@@ -8,7 +8,7 @@ two teams through a custom GPU queue, ComfyUI and Ollama servers, Blender render
 The cluster had to fit next to all of that without slowing anyone down, and without ever going
 around the GPU queue.
 
-**[Architecture](docs/architecture.md)** · **[Decisions (12 ADRs)](docs/decisions.md)** ·
+**[Architecture](docs/architecture.md)** · **[Decisions (13 ADRs)](docs/decisions.md)** ·
 **[Postmortems](docs/postmortems/)** · **[Build log](docs/build-log.md)**
 
 ## Highlights
@@ -63,7 +63,7 @@ More in [docs/architecture.md](docs/architecture.md): every layer, the GPU job s
 | 1 | kubeadm cluster: containerd, Cilium, memory cap, auto-rollback | done |
 | 2 | GitOps: Argo CD app of apps, quotas, network policy | done |
 | 3 | GPU through the shared queue: CDI, RuntimeClass, admission policy | done |
-| 4 | Workloads: a render or generation pipeline as Kubernetes Jobs through the queue | planned |
+| 4 | Workloads: nightly Whisper subtitles as a CronJob through the queue (ADR-013) | in progress |
 | 5 | Observability: Prometheus, Grafana, GPU-queue exporter, Telegram alerts | done |
 | 6 | CI: linters, unit tests, kubeconform, admission tests on kind; image scanned and pushed to GHCR | done |
 | 7 | Terraform: Argo CD bootstrap and the GitHub repository, state in the cluster | done |

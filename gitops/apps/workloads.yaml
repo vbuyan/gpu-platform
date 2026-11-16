@@ -1,0 +1,17 @@
+# Workloads that do real work for the studio, every one of them through the GPU queue.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: workloads
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/vbuyan/gpu-platform.git
+    targetRevision: main
+    path: gitops/workloads
+    directory: {recurse: true}
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
