@@ -83,6 +83,23 @@ spec:
             description: "Probably a hung job; check gpu queue."
     - name: station.cluster
       rules:
+        # added after the 2026-11-15 disk-pressure eviction storm went unnoticed for 5.5 hours
+        - alert: KubeNodeUnderPressure
+          expr: max by (condition) (kube_node_status_condition{condition=~"DiskPressure|MemoryPressure|PIDPressure",status="true"}) == 1
+          for: 5m
+          labels: {severity: warning}
+          annotations:
+            summary: "Node reports {{ $labels.condition }}; kubelet is evicting pods"
+            summary_ru: "Кластер под давлением ({{ $labels.condition }}): kubelet выселяет поды"
+            description: See docs/postmortems/2026-11-15-disk-pressure-eviction-storm.md.
+        - alert: PodsEvicted
+          expr: sum(kube_pod_status_reason{reason="Evicted"}) > 3
+          for: 10m
+          labels: {severity: warning}
+          annotations:
+            summary: "{{ $value }} evicted pods in the cluster"
+            summary_ru: "В кластере {{ $value }} выселенных подов"
+            description: Check kubectl get pods -A --field-selector=status.phase=Failed for the reason.
         - alert: ClusterNearMemoryCap
           expr: |
             sum(container_memory_working_set_bytes{id="/kubepods.slice"})
