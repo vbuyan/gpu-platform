@@ -18,7 +18,7 @@ OUT = os.environ.get("OUT", "/textfile/gpu_queue.prom")
 RUN = os.environ.get("GPU_RUN", "/host/run/gpu")
 WHO = os.environ.get("GPU_WHO", "/host/srv/gpu.who")
 LOG = os.environ.get("GPU_LOG", "/host/srv/gpu.log")
-VRAM_TOTAL_MIB = float(os.environ.get("VRAM_TOTAL_MIB", "24576"))
+VRAM_TOTAL_MIB = os.environ.get("VRAM_TOTAL_MIB")   # card size, set in the deployment
 EVERY = int(os.environ.get("EVERY_S", "15"))
 TAIL_BYTES = 2_000_000   # the job log grows forever; 2 MB covers well over a day
 
@@ -52,7 +52,8 @@ def collect(now):
         try:
             used, temp, power, util = (float(x) for x in snap.strip().split(","))
             add("station_gpu_memory_used_mib", "VRAM in use.", "gauge", [({}, used)])
-            add("station_gpu_memory_total_mib", "VRAM size.", "gauge", [({}, VRAM_TOTAL_MIB)])
+            if VRAM_TOTAL_MIB:
+                add("station_gpu_memory_total_mib", "VRAM size.", "gauge", [({}, float(VRAM_TOTAL_MIB))])
             add("station_gpu_temperature_celsius", "GPU temperature.", "gauge", [({}, temp)])
             add("station_gpu_power_watts", "GPU power draw.", "gauge", [({}, power)])
             add("station_gpu_utilization_ratio", "GPU utilization 0..1.", "gauge", [({}, util / 100)])

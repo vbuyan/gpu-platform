@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Keep the cluster running all the time (for monitoring and alerts), but make it the first thing to
-# give memory back when the host runs short (ADR-011). Two layers, both on top of the 6.5 GiB cap:
+# give memory back when the host runs short (ADR-011). Two layers, both on top of the cgroup cap:
 #   1. kubelet eviction: when host memory.available falls under 4 GiB for 30 s (soft) or under 2 GiB
 #      (hard), kubelet evicts pods (Prometheus, Grafana, Argo CD...) and taints the node so they do not
 #      come back until the pressure is gone. Static control-plane pods stay (~1 GiB).
@@ -24,7 +24,7 @@ import sys, yaml
 path, hard, soft = sys.argv[1], sys.argv[2], sys.argv[3]
 c = yaml.safe_load(open(path))
 c.setdefault("evictionHard", {})["memory.available"] = hard
-# 5 % of a 1.8 TB disk is ~90 GiB and the studio keeps this disk ~95 % full: the percentage
+# 5 % of a large disk is far more than the pods need, and the studio keeps it just above that: the percentage
 # evicted every pod three times in one night (ADR-011). Pods need far less; use an absolute floor.
 c["evictionHard"]["nodefs.available"] = "20Gi" if soft else "5%"
 c["evictionHard"]["imagefs.available"] = "20Gi" if soft else "5%"

@@ -23,13 +23,13 @@ apiServer:
 apiVersion: kubelet.config.k8s.io/v1beta1
 kind: KubeletConfiguration
 cgroupDriver: systemd
-# The host keeps its 32 GB swap (it protects other workloads); pods never swap.
+# The host keeps its swap (it protects other workloads); pods never swap.
 failSwapOn: false
 memorySwap:
   swapBehavior: NoSwap
-# Hard budget for the whole cluster on a 31 GiB / 16-core host that also runs
+# Hard budget for the whole cluster on a host that also runs
 # ComfyUI, Ollama and two teams' jobs: everything Kubernetes starts lives in
-# kubepods.slice, which the kubelet caps at capacity - systemReserved (~6.5 GiB, 6 CPUs).
+# kubepods.slice, which the kubelet caps at capacity - systemReserved.
 systemReserved:
   memory: 24Gi
   cpu: "10"

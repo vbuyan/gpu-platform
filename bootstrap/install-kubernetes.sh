@@ -3,7 +3,7 @@
 #
 # Design constraints (see docs/decisions.md):
 #   - The host is production: two teams share it, RAM is the bottleneck, access is remote over Tailscale.
-#   - The whole cluster (control plane + workloads) is capped by the kubepods cgroup (~6.5 GiB).
+#   - The whole cluster (control plane + workloads) is capped by the kubepods cgroup (host memory minus systemReserved).
 #   - The cluster runs on demand: containerd and kubelet do not start at boot (`k8s on` / `k8s off`).
 #   - Host swap stays on (kubelet: failSwapOn=false, swapBehavior=NoSwap).
 #   - A dead man's switch rolls everything back in 20 minutes unless the operator confirms

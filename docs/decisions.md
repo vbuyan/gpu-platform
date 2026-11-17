@@ -6,14 +6,14 @@
 **Decision.** Use upstream kubeadm with containerd.
 **Why.** The goal includes operating Kubernetes the way most employers and the CKA exam do:
 static-pod control plane, etcd, certificates, kubelet configuration, upgrades with kubeadm.
-The memory cost (about 1.5 to 2 GiB for the control plane) fits inside the cluster budget (ADR-002).
+The memory cost of the control plane fits inside the cluster budget (ADR-002).
 
 ## ADR-002: one memory cap for the whole cluster
 
-**Context.** The host has 31 GiB of RAM, usually 20 to 25 GiB in use by ComfyUI, Ollama and
+**Context.** Most of the host's RAM is usually in use by ComfyUI, Ollama and
 batch jobs. Two multi-hour freezes in October were caused by RAM exhaustion.
 **Decision.** `systemReserved: 24Gi` with `enforceNodeAllocatable: [pods]`. The kubelet caps
-`kubepods.slice` at roughly 6.5 GiB, and every container, including the static control-plane pods,
+`kubepods.slice` at host memory minus the reservation, and every container, including the static control-plane pods,
 lives under it.
 **Consequence.** The cluster can be OOM-killed inside its own budget but cannot take the host down.
 Workloads must declare requests and limits that fit.
@@ -27,7 +27,7 @@ keeps running behind a stopped containerd.
 
 ## ADR-004: keep host swap, pods never swap
 
-**Context.** The host relies on 32 GiB of swap plus systemd-oomd; kubeadm expects swap off.
+**Context.** The host relies on swap plus systemd-oomd; kubeadm expects swap off.
 **Decision.** `failSwapOn: false` and `swapBehavior: NoSwap`: the node keeps swap, pod memory is
 never swapped, so limits stay predictable.
 
@@ -70,7 +70,7 @@ Self-management uses `prune: false`, so a bad commit cannot delete Argo CD.
 
 ## ADR-009: the GPU stays outside the scheduler; pods take turns in the existing queue
 
-**Context.** One RTX 3090 is shared by two teams through a host dispatcher (`gpu run`): one owner at
+**Context.** One consumer GPU is shared by two teams through a host dispatcher (`gpu run`): one owner at
 a time, the device files are opened (ACL) only for the current owner, a janitor unloads idle models.
 The NVIDIA device plugin would advertise `nvidia.com/gpu: 1` and hand the card to a pod whenever
 Kubernetes thinks it is free. Kubernetes cannot see the host workloads, so it would always think so.
@@ -125,8 +125,8 @@ and Grafana uses the Recreate strategy because its volume is ReadWriteOnce.
 ## ADR-011: always on, first to yield (supersedes ADR-003 for day-to-day use)
 
 **Context.** Monitoring and alerts are only useful if the cluster runs all the time; on-demand meant
-silence after every reboot. Measured with the full stack running: the cluster uses ~2.8 GiB of process
-memory, the host had 18 GiB available and never less than 6 GiB over two hours of 3D rendering, and
+silence after every reboot. Measured with the full stack running: the cluster stays well under its cap, the host kept
+a comfortable margin of available memory over two hours of 3D rendering, and
 systemd-oomd killed nothing in the previous week. The risk is the rare peak when big models load
 while a render runs: the October freezes began at about 2 GiB available.
 **Decision.** containerd and kubelet start at boot, and the cluster gives memory back first:
@@ -134,10 +134,10 @@ while a render runs: the October freezes began at about 2 GiB available.
   away while the node has the MemoryPressure taint; only the static control plane (~1 GiB) remains.
 - systemd-oomd watches `kubepods.slice` with a 20 % memory-pressure limit, stricter than the 50 %
   on `system.slice`, so under real pressure it kills cluster pods before studio jobs.
-- The 6.5 GiB cap (ADR-002) still bounds the cluster from above.
-**Disk, found the first night.** The default `nodefs.available: 5%` means ~90 GiB on this 1.8 TB disk,
-which the studio keeps about 95 % full: kubelet evicted every pod three times in one night (209
-evicted pods, all of them on disk pressure, none on memory). The floor is now an absolute 20 GiB.
+- The cgroup cap (ADR-002) still bounds the cluster from above.
+**Disk, found the first night.** The default `nodefs.available: 5%` is a lot of space on a large disk,
+and the studio keeps the disk just above that line: kubelet evicted every pod three times in one night (209
+evicted pods, all of them on disk pressure, none on memory). The floor is now an absolute value sized for the pods.
 **Review.** The `StationMemoryLow` alert and the "Memory: host available vs cluster" panel show whether
 this costs the studio anything. If available memory often drops under 3 GiB with the cluster running,
 `install-always-on.sh --rollback` returns to on-demand.

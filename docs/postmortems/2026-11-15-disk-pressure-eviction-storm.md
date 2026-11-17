@@ -11,33 +11,33 @@
 ## Summary
 
 kubelet evicted every pod on the node, in three waves, because the root filesystem had less free space
-than `nodefs.available: 5%`. On this 1.8 TB disk 5 % is about 90 GiB, and the studio keeps the disk
-around 95 % full, so the node sat right on the threshold. The pods came back each time, got evicted
+than `nodefs.available: 5%`. On a large disk 5 % is far more than the pods need, and the studio keeps the disk
+just above 5 % free, so the node sat right on the threshold. The pods came back each time, got evicted
 again, and nobody was told: there was no alert for node pressure or evictions.
 
 ## Timeline (PST)
 
 | Time | Event |
 |---|---|
-| 15.11 16:27 | Free space on `/` drops under ~90 GiB. Node condition `DiskPressure=True`; kubelet taints the node and starts evicting. |
+| 15.11 16:27 | Free space on `/` drops under 5 %. Node condition `DiskPressure=True`; kubelet taints the node and starts evicting. |
 | 16:00-17:00 | First wave: 169 pods evicted and recreated in one hour. |
 | 17:00-18:00 | Second wave: 4 pods. |
 | 21:00-22:00 | Third wave: 35 pods. |
 | 22:04 | Free space rises back over the threshold; `DiskPressure=False`. |
 | 22:09 | While adopting Argo CD into Terraform, `kubectl get pods -n argocd` shows hundreds of `Evicted` pods. |
-| 22:12 | Every evicted pod has the same message: `The node was low on resource: ephemeral-storage. Threshold quantity: 98336835410`. Memory is ruled out: available RAM never fell under 6 GiB. |
-| 22:20 | Threshold changed to an absolute 20 GiB in the installer; 209 failed pods deleted. |
+| 22:12 | Every evicted pod has the same message: `The node was low on resource: ephemeral-storage. Threshold quantity: <5 % of the disk>`. Memory is ruled out: available RAM stayed well above the eviction line. |
+| 22:20 | Threshold changed to an absolute floor in the installer; 209 failed pods deleted. |
 | 23:11 | Operator reruns the always-on installer; live kubelet config shows `nodefs.available: 20Gi`. |
 
 ## Root cause
 
 The kubelet configuration used a relative disk threshold that made sense for small nodes, not for a
-1.8 TB disk shared with a studio that stores renders and models on it. Pods on this node need a few
-GiB; 90 GiB of headroom was never about them.
+large disk shared with a studio that stores renders and models on it. Pods on this node need a few
+GiB; 5 % of a large disk was never about them.
 
 ## Contributing factors
 
-- The studio keeps the disk 93 to 95 % full; free space moved between 91 and 134 GiB that day.
+- The studio keeps the disk nearly full; free space moved just above and below 5 % that day.
 - The stage 1 installer copied the common `5%` default without checking it against the disk size.
 - The alert rules covered host disk, memory, the GPU and Argo CD, but not kubelet's own view: node
   pressure conditions and evictions.
@@ -63,7 +63,7 @@ the applications recovered between waves.
 
 | Item | Status |
 |---|---|
-| Absolute disk thresholds: `nodefs.available` and `imagefs.available` 20 GiB (ADR-011) | Done |
+| Absolute disk thresholds: `nodefs.available` and `imagefs.available` as absolute values (ADR-011) | Done |
 | Alert `KubeNodeUnderPressure`: any node pressure condition for 5 min | Done |
 | Alert `PodsEvicted`: more than 3 evicted pods present | Done |
 | Disk cleanup on the studio side (renders, model caches) | Open, owned by the studio |

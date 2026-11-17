@@ -1,4 +1,4 @@
-# kube-prometheus-stack for a single-node cluster capped at ~6.5 GiB (ADR-002, ADR-010).
+# kube-prometheus-stack for a single-node cluster with a hard memory cap (ADR-002, ADR-010).
 # Requests ~0.8 GiB, limits ~2.4 GiB. The control-plane components bind to 127.0.0.1 on kubeadm,
 # so their scrapers and rules are off instead of alerting "down" forever.
 crds:
@@ -106,6 +106,8 @@ prometheus-node-exporter:
     - name: gpu-queue-exporter
       image: python:3.12.15-slim
       command: [python3, -I, /exporter/gpu_queue_exporter.py]
+      env:
+        - {name: VRAM_TOTAL_MIB, value: "24576"}
       resources:
         requests: {cpu: 10m, memory: 24Mi}
         limits: {memory: 64Mi}

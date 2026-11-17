@@ -1,4 +1,4 @@
-# Argo CD for a single-node cluster capped at ~6.5 GiB (see docs/decisions.md, ADR-002).
+# Argo CD for a single-node cluster with a hard memory cap (see docs/decisions.md, ADR-002).
 # Requests add up to ~0.5 GiB, limits to ~1.8 GiB. No SSO (dex) and no notifications yet.
 configs:
   params:

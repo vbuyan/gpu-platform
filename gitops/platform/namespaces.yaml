@@ -1,4 +1,4 @@
-# Workload namespaces with budgets. The node cap is ~6.5 GiB; system pods and Argo CD take ~1.5 GiB.
+# Workload namespaces with budgets. They sit inside the node memory cap next to system pods and Argo CD.
 # Every container gets default requests/limits, so nothing runs unbounded.
 apiVersion: v1
 kind: Namespace

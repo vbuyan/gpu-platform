@@ -3,7 +3,7 @@
 [![ci](https://github.com/vbuyan/gpu-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/vbuyan/gpu-platform/actions/workflows/ci.yml)
 [![image](https://github.com/vbuyan/gpu-platform/actions/workflows/image.yml/badge.svg)](https://github.com/vbuyan/gpu-platform/actions/workflows/image.yml)
 
-A Kubernetes platform built on a workstation that was already in production: one RTX 3090 shared by
+A Kubernetes platform built on a workstation that was already in production: one consumer GPU shared by
 two teams through a custom GPU queue, ComfyUI and Ollama servers, Blender renders and video pipelines.
 The cluster had to fit next to all of that without slowing anyone down, and without ever going
 around the GPU queue.
@@ -14,11 +14,11 @@ around the GPU queue.
 ## Highlights
 
 - **Full kubeadm cluster on a shared, remote host.** Kubernetes 1.37, containerd, Cilium. The whole
-  cluster is capped at 6.5 GiB of a 31 GiB machine, runs all the time, and is the first thing to give
+  cluster is capped at a small slice of host memory, runs all the time, and is the first thing to give
   memory back under pressure. Installs arm a dead man's switch: a broken install rolls itself back.
 - **GPU pods take turns in the host's existing queue instead of a device plugin.** A pod joins the same
   dispatcher the studio uses, as its own participant. Live test: it waited 927 s behind a Blender render,
-  ran an fp16 benchmark at 66 TFLOPS and handed the card on 2 s after exiting. An admission policy in
+  ran an fp16 benchmark at the card's full speed and handed the card on 2 s after exiting. An admission policy in
   CEL makes it impossible to create a GPU pod that skips the queue (10 bypass cases tested in CI).
 - **GitOps end to end.** Argo CD (app of apps) applies everything from this repo and upgrades itself.
   Terraform covers the two things Argo CD cannot: its own bootstrap and the GitHub repository.
@@ -38,7 +38,7 @@ flowchart LR
   argo --> job[GPU pod<br/>runtime class gpu-queue]
   job -->|joins as kube-gpu| q{{host GPU queue}}
   studio[studio jobs<br/>ComfyUI · renders] --> q
-  q --> gpu[(RTX 3090)]
+  q --> gpu[(GPU)]
   mon -->|alerts| tg[Telegram]
 ```
 
@@ -48,13 +48,13 @@ More in [docs/architecture.md](docs/architecture.md): every layer, the GPU job s
 
 | Constraint | How the platform handles it |
 |---|---|
-| RAM is the bottleneck (31 GiB, often 25 GiB used) | The whole cluster lives in one cgroup capped at ~6.5 GiB |
-| Two teams share the host | The cluster runs all the time but yields first: eviction at 4 / 2 GiB RAM, oomd kills it before studio jobs (ADR-011) |
+| RAM is the bottleneck (most of it is used by production work) | The whole cluster lives in one cgroup with a hard memory cap |
+| Two teams share the host | The cluster runs all the time but yields first: kubelet eviction on low host memory, oomd kills it before studio jobs (ADR-011) |
 | One GPU shared through an existing queue | GPU pods acquire the card through the same queue, never around it (ADR-009) |
 | Remote host, reached only over Tailscale | Installs arm a dead man's switch that rolls everything back unless confirmed (ADR-005) |
 | Host swap must stay on | kubelet `failSwapOn: false`, `swapBehavior: NoSwap` (ADR-004) |
 | Host firewall blocks the home LAN | Tagged firewall exceptions for cluster ranges; pods still cannot reach the LAN (ADR-007) |
-| Disk shared with the studio, ~95 % full | Absolute 20 GiB eviction floor, alerts on node pressure and evictions (ADR-011) |
+| Disk shared with the studio and kept nearly full | Absolute eviction floor instead of a percentage, alerts on node pressure and evictions (ADR-011) |
 
 ## How this maps to production
 
@@ -68,7 +68,7 @@ it would be on a managed cloud cluster, and why it is different here.
 | kubeadm on one node | Managed control plane (EKS), node groups | One machine, no cloud budget; kubeadm also shows what a managed service hides (ADR-001) |
 | GPU via CDI + RuntimeClass `gpu-queue`, no device plugin | NVIDIA GPU Operator: driver, device plugin, `nvidia.com/gpu` resource | The card is also used by programs outside the cluster, so the scheduler cannot own it (ADR-009) |
 | Shared host queue (`turn`), background and urgent jobs | Kueue, Volcano or Run:ai: queues, priorities, fair share | The queue already existed for the studio; pods join it instead of competing with it |
-| Whole job holds the card for its turn | MIG slices (A100/H100) or time-slicing | Consumer cards have no MIG; one job at a time is the honest model for a 24 GB card |
+| Whole job holds the card for its turn | MIG slices (A100/H100) or time-slicing | Consumer cards have no MIG; one job at a time is the honest model for a single consumer card |
 | ValidatingAdmissionPolicy `gpu-through-queue` | Same, or Kyverno / OPA Gatekeeper | Same idea: a GPU pod that skips the queue is rejected at admission |
 | One cgroup cap, eviction thresholds, oomd | Dedicated GPU node pools, taints, requests and limits, Karpenter | Here the cluster shares a host with production work, so it must yield first (ADR-002, ADR-011) |
 | Textfile exporter reading the queue state | DCGM exporter for GPU metrics, Kueue metrics for queues | No NVML calls from pods, so monitoring can never hold the card (ADR-010) |

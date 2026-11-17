@@ -9,7 +9,7 @@
 
 ## Summary
 
-The first live GPU pod passed admission, pulled its 3.3 GB image and then failed to start:
+The first live GPU pod passed admission, pulled its image and then failed to start:
 `exec: "/opt/gpu-queue/turn": stat /opt/gpu-queue/turn: no such file or directory`. The design asked
 containerd to inject two CDI devices named in a pod annotation; containerd never saw that annotation.
 
@@ -28,7 +28,7 @@ which injects the devices. Pods of every other class keep plain runc. The admiss
 requires the runtime class.
 
 Second attempt: the pod joined the shared queue as `kube-gpu`, waited 927 s behind a Blender render,
-ran an fp16 matmul at 66 TFLOPS and released the card 2 s after exiting.
+ran an fp16 matmul and released the card 2 s after exiting.
 
 ## What went well
 
