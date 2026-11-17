@@ -37,7 +37,8 @@ echo "0. Preflight"
 [ -f /etc/kubernetes/admin.conf ] || { echo "Install the cluster first (stage 1)"; exit 1; }
 [ -S /run/gpu/ochered.sock ] || { echo "GPU queue socket /run/gpu/ochered.sock not found"; exit 1; }
 for g in gpu gpudev; do getent group "$g" >/dev/null || { echo "group $g missing"; exit 1; }; done
-id vorota >/dev/null 2>&1 || { echo "user vorota missing (needed to query the GPU without root)"; exit 1; }
+GATE_USER=${GATE_USER:?set GATE_USER to the account the host GPU gate runs as}
+id "$GATE_USER" >/dev/null 2>&1 || { echo "user $GATE_USER missing (needed to query the GPU without root)"; exit 1; }
 [ -z "$(dpkg --audit 2>&1)" ] || { echo "The package system is not clean, fix it first"; exit 1; }
 
 echo "1. Host user kube-gpu (uid $KUBE_GPU_UID), member of the queue group gpu"
@@ -58,9 +59,9 @@ apt-mark hold nvidia-container-toolkit-base >/dev/null
 
 echo "3. CDI description of the GPU"
 # NVML used as root resets the permissions of /dev/nvidia* and would open the card to everyone until the
-# station's gpu-dostup service puts them back. Query it the way gpu-dostup does: as user vorota with the card's group.
-tmp=$(mktemp -d); chown vorota "$tmp"
-setpriv --reuid=vorota --regid=vorota --groups="$(getent group gpudev | cut -d: -f3)" -- \
+# station's gpu-dostup service puts them back. Query it the way gpu-dostup does: as the gate's user with the card's group.
+tmp=$(mktemp -d); chown "$GATE_USER" "$tmp"
+setpriv --reuid="$GATE_USER" --regid="$GATE_USER" --groups="$(getent group gpudev | cut -d: -f3)" -- \
   nvidia-ctk --quiet cdi generate --output="$tmp/nvidia.yaml"
 install -d -m 755 /etc/cdi
 install -m 644 "$tmp/nvidia.yaml" /etc/cdi/nvidia.yaml

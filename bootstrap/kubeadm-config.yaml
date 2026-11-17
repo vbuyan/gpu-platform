@@ -16,7 +16,7 @@ networking:
   serviceSubnet: 10.96.0.0/12
 apiServer:
   certSANs:                       # kubectl from the laptop over Tailscale
-    - ai-station
+    - __HOSTNAME__
     - __TS_IP__
     - 127.0.0.1
 ---

@@ -113,7 +113,7 @@ def collect(now):
             failed[owner] += 1
         if len(p) >= 7 and p[-1].isdigit():
             waited[owner] = max(waited[owner], float(p[-1]))
-    owners = sorted(set(jobs) | {"purpose", "ber"})
+    owners = sorted(set(jobs) | {o for o in os.environ.get("GPU_QUEUE_OWNERS", "").split(",") if o})
     add("station_gpu_jobs_24h", "Finished GPU jobs in the last 24 h.", "gauge", [({"owner": o}, jobs[o]) for o in owners])
     add("station_gpu_jobs_failed_24h", "GPU jobs with a non-zero exit code in the last 24 h.", "gauge",
         [({"owner": o}, failed[o]) for o in owners])

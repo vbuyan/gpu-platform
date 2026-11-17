@@ -56,6 +56,33 @@ More in [docs/architecture.md](docs/architecture.md): every layer, the GPU job s
 | Host firewall blocks the home LAN | Tagged firewall exceptions for cluster ranges; pods still cannot reach the LAN (ADR-007) |
 | Disk shared with the studio, ~95 % full | Absolute 20 GiB eviction floor, alerts on node pressure and evictions (ADR-011) |
 
+## How this maps to production
+
+This runs on one workstation with a consumer GPU because that is the hardware there is. The problems
+are the same ones a company has with a GPU fleet: several teams, expensive cards, a fair queue,
+nothing allowed to starve anything else. The table shows which piece here plays which role, what
+it would be on a managed cloud cluster, and why it is different here.
+
+| Here | On EKS / GKE / AKS | Why it differs here |
+|---|---|---|
+| kubeadm on one node | Managed control plane (EKS), node groups | One machine, no cloud budget; kubeadm also shows what a managed service hides (ADR-001) |
+| GPU via CDI + RuntimeClass `gpu-queue`, no device plugin | NVIDIA GPU Operator: driver, device plugin, `nvidia.com/gpu` resource | The card is also used by programs outside the cluster, so the scheduler cannot own it (ADR-009) |
+| Shared host queue (`turn`), background and urgent jobs | Kueue, Volcano or Run:ai: queues, priorities, fair share | The queue already existed for the studio; pods join it instead of competing with it |
+| Whole job holds the card for its turn | MIG slices (A100/H100) or time-slicing | Consumer cards have no MIG; one job at a time is the honest model for a 24 GB card |
+| ValidatingAdmissionPolicy `gpu-through-queue` | Same, or Kyverno / OPA Gatekeeper | Same idea: a GPU pod that skips the queue is rejected at admission |
+| One cgroup cap, eviction thresholds, oomd | Dedicated GPU node pools, taints, requests and limits, Karpenter | Here the cluster shares a host with production work, so it must yield first (ADR-002, ADR-011) |
+| Textfile exporter reading the queue state | DCGM exporter for GPU metrics, Kueue metrics for queues | No NVML calls from pods, so monitoring can never hold the card (ADR-010) |
+| Prometheus + Grafana + Alertmanager to Telegram | Same stack, or Amazon Managed Prometheus / Grafana, alerts to PagerDuty or Slack | Same tools, smaller retention |
+| Argo CD app of apps | Same | Same |
+| Terraform: Argo CD bootstrap + GitHub repo, state in a Kubernetes Secret | Terraform for VPC, EKS, IAM, node groups; state in S3 with locking | Nothing to provision in a cloud; state lives in the cluster it manages (ADR-012) |
+| Static local PVs for models and media | EBS / EFS CSI, models in S3 or a model registry | Single node, data already on its disk |
+| Images on GHCR, scanned by Trivy in CI | ECR with scan on push, same Trivy gate | Same gate |
+| Tailscale + dead man's switch for remote changes | Bastion or SSM, change windows, managed upgrades | One remote host with nobody next to it (ADR-005) |
+
+The parts that would carry over unchanged: the GitOps layout, the admission policy, the alert rules,
+the CI pipeline and the CronJob. The parts that would be replaced by managed services: the control
+plane, the GPU access layer and the queue.
+
 ## Roadmap
 
 | Stage | What | Status |
@@ -63,11 +90,11 @@ More in [docs/architecture.md](docs/architecture.md): every layer, the GPU job s
 | 1 | kubeadm cluster: containerd, Cilium, memory cap, auto-rollback | done |
 | 2 | GitOps: Argo CD app of apps, quotas, network policy | done |
 | 3 | GPU through the shared queue: CDI, RuntimeClass, admission policy | done |
-| 4 | Workloads: nightly Whisper subtitles as a CronJob through the queue (ADR-013) | in progress |
+| 4 | Workloads: nightly Whisper subtitles as a CronJob through the queue (ADR-013) | done |
 | 5 | Observability: Prometheus, Grafana, GPU-queue exporter, Telegram alerts | done |
 | 6 | CI: linters, unit tests, kubeconform, admission tests on kind; image scanned and pushed to GHCR | done |
 | 7 | Terraform: Argo CD bootstrap and the GitHub repository, state in the cluster | done |
-| 8 | Write-ups: architecture, 12 ADRs, 3 postmortems, build log | done |
+| 8 | Write-ups: architecture, 13 ADRs, 3 postmortems, production mapping, build log | done |
 
 ## Layout
 

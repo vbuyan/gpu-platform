@@ -86,3 +86,17 @@ What each stage delivered, with the numbers measured at the time. Decisions are 
 - Three postmortems with timelines rebuilt from logs and Prometheus history.
 - The disk-pressure postmortem produced two new alerts: `KubeNodeUnderPressure` and `PodsEvicted`.
 - README rewritten for a first-time reader; per-stage results moved here.
+
+## Stage 4 result (2026-11-16)
+
+- CronJob `subtitles` (01:15 station time) plus `bin/subtitles add|now|status`. First run on two
+  published short videos: 24 s and 27 s of speech transcribed in about 1 s each
+  (16x and 36x realtime), 9 and 13 subtitle lines, numbers such as "1,700" and "50 to 60" correct.
+- The pod joined the shared GPU queue as a background job, held the card for 22 s and gave it back.
+- It also waited 7886 s first: a host render had its turn but sat waiting for VRAM held by an idle
+  ComfyUI whose pending jobs needed the same turn, a deadlock on the host side. The pod waited
+  patiently and never jumped the queue; the station's operators cleared the deadlock by hand.
+- The image needed four CI runs: PEP 668 in the PyTorch base, then Trivy blocked it three times on
+  critical CVEs shipped with the base (Pillow, certifi and uv CA stores, pip's vendored certifi).
+  Each was fixed in the Dockerfile; the gate was never loosened.
+

@@ -16,7 +16,7 @@ flowchart TB
 
   subgraph host[Workstation: Ubuntu 24.04, 16 CPU, 31 GiB RAM, RTX 3090]
     subgraph studio[Studio workloads: unchanged]
-      comfy[ComfyUI / Ollama<br/>behind gpu-vorota]
+      comfy[ComfyUI / Ollama<br/>behind a GPU gate]
       jobs[gpu run jobs:<br/>renders, clips, LoRA]
     end
     queue{{GPU dispatcher<br/>/run/gpu/ochered.sock}}

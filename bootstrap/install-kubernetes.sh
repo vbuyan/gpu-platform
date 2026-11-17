@@ -21,8 +21,8 @@ K8S_VERSION=v1.37.2
 K8S_MINOR=v1.37
 CILIUM_VERSION=1.20.4
 HELM_VERSION=v4.3.2
-OPERATOR=purpose
-OPERATOR_HOME=/home/$OPERATOR
+OPERATOR=${SUDO_USER:?run with sudo from the operator account}
+OPERATOR_HOME=$(getent passwd "$OPERATOR" | cut -d: -f6)
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 LOG=/var/log/gpu-platform-install.log
 TIMER=gpu-platform-auto-rollback
@@ -174,7 +174,7 @@ rm -rf "$tmp"
 # ------------------------------------------------------------------ 5. kubeadm init
 echo "5. kubeadm init (control plane, memory-capped kubelet)"
 sed -e "s|__NODE_IP__|$NODE_IP|g" -e "s|__TS_IP__|$TS_IP|g" -e "s|__K8S_VERSION__|$K8S_VERSION|g" \
-    -e "s|__POD_CIDR__|$POD_CIDR|g" "$REPO/bootstrap/kubeadm-config.yaml" > /root/kubeadm-config.yaml
+    -e "s|__POD_CIDR__|$POD_CIDR|g" -e "s|__HOSTNAME__|$(hostname)|g" "$REPO/bootstrap/kubeadm-config.yaml" > /root/kubeadm-config.yaml
 kubeadm init --config /root/kubeadm-config.yaml --ignore-preflight-errors=Swap
 install -d -o "$OPERATOR" -g "$OPERATOR" "$OPERATOR_HOME/.kube"
 install -m 600 -o "$OPERATOR" -g "$OPERATOR" /etc/kubernetes/admin.conf "$OPERATOR_HOME/.kube/config"
